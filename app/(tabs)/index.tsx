@@ -8,6 +8,7 @@ import { PhotoTile } from '../../src/components/PhotoTile';
 import { markAssets, setOne } from '../../src/db/actions';
 import { STATUS } from '../../src/db/db';
 import { markedIds } from '../../src/db/queries';
+import { openPlayer } from '../../src/library/session';
 import { useDbQuery } from '../../src/library/useDbQuery';
 import { PermissionGate } from '../../src/photos/PermissionGate';
 import { usePhotos } from '../../src/photos/usePhotos';
@@ -106,6 +107,7 @@ function Library() {
             selected={selecting ? selected.has(item.id) : undefined}
             onPress={onPress}
             onLongPress={onLongPress}
+            onPlay={selecting ? undefined : openPlayer}
           />
         )}
       />

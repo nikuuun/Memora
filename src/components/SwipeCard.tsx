@@ -1,5 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -20,6 +21,7 @@ type Props = {
   item: Row;
   isTop: boolean;
   onSwiped: (item: Row, direction: SwipeDirection) => void;
+  onPlay?: (id: string) => void;
 };
 
 /** Tuning knobs for how the swipe feels. */
@@ -32,7 +34,7 @@ const FLY_OUT_MS = 180;
  * the parent removes it, the next card starts fresh at the centre (no flicker).
  * Left = mark for deletion, right = keep.
  */
-export function SwipeCard({ item, isTop, onSwiped }: Props) {
+export function SwipeCard({ item, isTop, onSwiped, onPlay }: Props) {
   const { width } = useWindowDimensions();
   const x = useSharedValue(0);
   const y = useSharedValue(0);
@@ -76,11 +78,23 @@ export function SwipeCard({ item, isTop, onSwiped }: Props) {
   return (
     <GestureDetector gesture={pan}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.card, cardStyle]}>
-        <Image source={{ uri: item.uri }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={item.id} />
+        {/* Blurred copy fills the card; the real photo sits on top whole, never cropped. */}
+        <Image source={{ uri: item.uri }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={40} recyclingKey={`${item.id}-bg`} />
+        <View style={[StyleSheet.absoluteFill, styles.scrim]} />
+        <Image source={{ uri: item.uri }} style={StyleSheet.absoluteFill} contentFit="contain" recyclingKey={item.id} />
         {item.media_type === 'video' && (
-          <View style={styles.videoBadge}>
-            <Text style={styles.videoText}>Video · {formatDuration(item.duration)}</Text>
-          </View>
+          <>
+            <View style={styles.videoBadge}>
+              <Text style={styles.videoText}>Video · {formatDuration(item.duration)}</Text>
+            </View>
+            {onPlay && (
+              <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="box-none">
+                <Pressable onPress={() => onPlay(item.id)} accessibilityLabel="Play video" style={styles.bigPlay}>
+                  <Ionicons name="play" size={30} color="#fff" style={{ marginLeft: 3 }} />
+                </Pressable>
+              </View>
+            )}
+          </>
         )}
         <Animated.View style={[styles.label, styles.labelLeft, markLabel]}>
           <Text style={styles.labelText}>Mark</Text>
@@ -105,6 +119,16 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   videoText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  scrim: { backgroundColor: 'rgba(0,0,0,0.15)' },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  bigPlay: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   label: {
     position: 'absolute',
     top: 24,

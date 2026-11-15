@@ -8,6 +8,7 @@ import { PhotoTile } from '../src/components/PhotoTile';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { applyChanges } from '../src/db/actions';
 import { STATUS } from '../src/db/db';
+import { openPlayer } from '../src/library/session';
 import { useLibrary } from '../src/library/store';
 import { colors, formatCount, items, radius, space } from '../src/theme';
 
@@ -104,6 +105,7 @@ export default function GridScreen() {
                 ring={!marked}
                 label={marked ? 'Marked. Tap to keep.' : 'Keeping. Tap to mark.'}
                 onPress={toggle}
+                onPlay={openPlayer}
               />
             );
           }}

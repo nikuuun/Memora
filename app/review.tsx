@@ -7,6 +7,8 @@ import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, useWin
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PhotoTile } from '../src/components/PhotoTile';
+import { ScreenHeader } from '../src/components/ScreenHeader';
+import { openPlayer } from '../src/library/session';
 import { forget, setOne, unmarkAll } from '../src/db/actions';
 import { STATUS } from '../src/db/db';
 import { markedRows } from '../src/db/queries';
@@ -62,7 +64,7 @@ export default function ReviewScreen() {
 
   if (deleted != null) {
     return (
-      <SafeAreaView style={[styles.safe, styles.done]} edges={['bottom']}>
+      <SafeAreaView style={[styles.safe, styles.done]} edges={['top', 'bottom']}>
         <View style={styles.doneIcon}>
           <Ionicons name="checkmark" size={32} color="#fff" />
         </View>
@@ -80,7 +82,8 @@ export default function ReviewScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <ScreenHeader title="Review" subtitle={`${items(rows.length)} marked`} />
       <Text style={styles.info}>
         Nothing has been deleted yet. Tap a photo to unmark it. When you delete, these move to Recently Deleted on your{' '}
         {DEVICE}, where you can recover them for 30 days.
@@ -99,6 +102,7 @@ export default function ReviewScreen() {
               duration={item.media_type === 'video' ? item.duration : undefined}
               label="Marked. Tap to unmark."
               onPress={(id) => setOne(id, STATUS.marked, STATUS.todo)}
+              onPlay={openPlayer}
             />
           )}
           ListEmptyComponent={<Text style={styles.empty}>Nothing is marked.</Text>}
@@ -128,7 +132,8 @@ export default function ReviewScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   info: {
-    margin: space.lg,
+    marginHorizontal: space.lg,
+    marginTop: space.xs,
     marginBottom: space.md,
     padding: space.md,
     borderRadius: radius.md,
