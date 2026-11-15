@@ -6,7 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDuration } from '../src/theme';
@@ -68,17 +68,23 @@ export default function PlayerScreen() {
     let alive = true;
     (async () => {
       try {
-        const info = await MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true });
-        // iOS gives "ph://" ids, which video players can't open; localUri is the real file.
-        const uri = info.localUri ?? (info.uri.startsWith('ph://') ? null : info.uri);
-        if (!uri) throw new Error('No playable file for this video.');
-        if (!alive) return;
-        try {
-          const bytes = new File(uri).size;
-          if (bytes) setSize(formatSize(bytes));
-        } catch {
-          // Size is a nice-to-have; some sources don't expose it.
+        let uri: string;
+        if (Platform.OS === 'ios') {
+          // Hand expo-video the Photos id. It asks Photos for the video with a
+          // sandbox permission (and downloads it from iCloud if needed). The raw
+          // file path from getAssetInfoAsync can't be opened by the player.
+          uri = id.startsWith('ph://') ? id : `ph://${id}`;
+        } else {
+          const info = await MediaLibrary.getAssetInfoAsync(id);
+          uri = info.localUri ?? info.uri;
+          try {
+            const bytes = new File(uri).size;
+            if (bytes) setSize(formatSize(bytes));
+          } catch {
+            // Size is a nice-to-have; some sources don't expose it.
+          }
         }
+        if (!alive) return;
         await player.replaceAsync({ uri });
         if (!alive) return;
         setRate(player, prefs.speed);
