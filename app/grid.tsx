@@ -122,7 +122,7 @@ export default function GridScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  headerBtn: { height: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  headerBtn: { height: 44, justifyContent: 'center', paddingHorizontal: 8 },
   headerBtnText: { fontSize: 14, color: colors.text },
   hint: { fontSize: 13, lineHeight: 18, color: colors.muted, paddingHorizontal: space.lg, paddingBottom: 10 },
   footer: { padding: space.lg, paddingBottom: space.sm, borderTopWidth: 1, borderTopColor: colors.line },

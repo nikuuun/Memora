@@ -3,10 +3,11 @@ import { useEventListener } from 'expo';
 import { File } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDuration } from '../src/theme';
 
@@ -35,9 +36,12 @@ function formatSize(bytes: number) {
 /**
  * Full-screen player. Only one video loads at a time, and only when you tap
  * play. iCloud-only videos download first (a spinner shows meanwhile).
+ * Controls follow Apple's guidance: 44pt touch targets, 16pt from the edges,
+ * clear of the status bar / Dynamic Island and the home indicator.
  */
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState<string | null>(null);
@@ -51,14 +55,12 @@ export default function PlayerScreen() {
 
   useEventListener(player, 'playingChange', (e) => setPlaying(e.isPlaying));
   useEventListener(player, 'timeUpdate', (e) => setCurrent(e.currentTime));
-  useEventListener(player, 'sourceLoad', (e) => {
-    setDuration(e.duration);
-    setLoading(false);
-  });
+  useEventListener(player, 'sourceLoad', (e) => setDuration(e.duration));
   useEventListener(player, 'statusChange', (e) => {
+    if (e.status === 'readyToPlay') setLoading(false);
     if (e.status === 'error') {
       setLoading(false);
-      setError('This video couldn’t be played.');
+      setError(`This video couldn’t be played.${e.error?.message ? `\n${e.error.message}` : ''}`);
     }
   });
 
@@ -67,7 +69,9 @@ export default function PlayerScreen() {
     (async () => {
       try {
         const info = await MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true });
-        const uri = info.localUri ?? info.uri;
+        // iOS gives "ph://" ids, which video players can't open; localUri is the real file.
+        const uri = info.localUri ?? (info.uri.startsWith('ph://') ? null : info.uri);
+        if (!uri) throw new Error('No playable file for this video.');
         if (!alive) return;
         try {
           const bytes = new File(uri).size;
@@ -79,10 +83,10 @@ export default function PlayerScreen() {
         if (!alive) return;
         setRate(player, prefs.speed);
         player.play();
-      } catch {
+      } catch (e) {
         if (alive) {
           setLoading(false);
-          setError('This video couldn’t be opened.');
+          setError(`This video couldn’t be opened.${e instanceof Error ? `\n${e.message}` : ''}`);
         }
       }
     })();
@@ -90,6 +94,11 @@ export default function PlayerScreen() {
       alive = false;
     };
   }, [id, player]);
+
+  const close = () => {
+    player.pause();
+    router.back();
+  };
 
   const togglePlay = () => {
     if (playing) return player.pause();
@@ -111,30 +120,20 @@ export default function PlayerScreen() {
   };
 
   const progress = duration ? Math.min(1, current / duration) : 0;
+  const ready = !loading && !error;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.top}>
-        <Pressable onPress={() => router.back()} accessibilityLabel="Close video" style={styles.iconBtn} hitSlop={8}>
-          <Ionicons name="close" size={26} color="#fff" />
-        </Pressable>
-        <Text style={styles.info}>
-          {[duration ? formatDuration(duration) : null, size].filter(Boolean).join(' · ')}
-        </Text>
-        <Pressable onPress={cycleSpeed} accessibilityLabel={`Playback speed ${speed}×`} style={styles.iconBtn} hitSlop={8}>
-          <View style={styles.speed}>
-            <Text style={styles.speedText}>{speed}×</Text>
-          </View>
-        </Pressable>
-      </View>
+    <View style={styles.screen}>
+      <StatusBar style="light" />
 
-      <View style={{ flex: 1 }}>
+      {/* Video area: fills the space between the two control bars. */}
+      <View style={{ flex: 1, marginTop: insets.top + 52 }}>
         <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
         <Pressable
           style={[StyleSheet.absoluteFill, styles.center]}
           onPress={togglePlay}
           accessibilityLabel={playing ? 'Pause' : 'Play'}
-          disabled={loading || !!error}
+          disabled={!ready}
         >
           {loading ? (
             <ActivityIndicator color="#fff" size="large" />
@@ -148,9 +147,27 @@ export default function PlayerScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.bottom}>
-        <Pressable onPress={togglePlay} accessibilityLabel={playing ? 'Pause' : 'Play'} style={styles.iconBtn} hitSlop={8}>
-          <Ionicons name={playing ? 'pause' : 'play'} size={24} color="#fff" />
+      {/* Top bar sits below the status bar / Dynamic Island. */}
+      <View style={[styles.top, { paddingTop: Math.max(insets.top, 20) + 4 }]}>
+        <Pressable onPress={close} accessibilityLabel="Close video" style={styles.touch}>
+          <View style={styles.roundBtn}>
+            <Ionicons name="close" size={22} color="#fff" />
+          </View>
+        </Pressable>
+        <Text style={styles.info} numberOfLines={1}>
+          {[duration ? formatDuration(duration) : null, size].filter(Boolean).join(' · ')}
+        </Text>
+        <Pressable onPress={cycleSpeed} accessibilityLabel={`Playback speed ${speed}×`} style={styles.touch} disabled={!ready}>
+          <View style={[styles.speed, !ready && { opacity: 0.4 }]}>
+            <Text style={styles.speedText}>{speed}×</Text>
+          </View>
+        </Pressable>
+      </View>
+
+      {/* Bottom bar sits above the home indicator. */}
+      <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) + 4 }]}>
+        <Pressable onPress={togglePlay} accessibilityLabel={playing ? 'Pause' : 'Play'} style={styles.touch} disabled={!ready}>
+          <Ionicons name={playing ? 'pause' : 'play'} size={26} color="#fff" style={!ready && { opacity: 0.4 }} />
         </Pressable>
         <Text style={styles.time}>{formatDuration(current)}</Text>
         <Pressable
@@ -158,30 +175,51 @@ export default function PlayerScreen() {
           onLayout={(e) => setBarWidth(e.nativeEvent.layout.width || 1)}
           onPress={(e) => seek(e.nativeEvent.locationX)}
           accessibilityLabel="Seek"
+          disabled={!ready}
         >
           <View style={styles.bar}>
             <View style={[styles.barFill, { width: `${progress * 100}%` }]} />
           </View>
         </Pressable>
-        <Text style={[styles.time, { textAlign: 'right', color: '#BDBDB8' }]}>{formatDuration(duration)}</Text>
+        <Text style={[styles.time, styles.timeRight]}>{formatDuration(duration)}</Text>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#000' },
-  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8 },
-  iconBtn: { width: 48, height: 44, alignItems: 'center', justifyContent: 'center' },
-  info: { color: '#BDBDB8', fontSize: 13 },
-  speed: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
+  screen: { flex: 1, backgroundColor: '#000' },
+  top: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 6, // + centred 44pt targets = icons ~16pt from the edge
   },
-  speedText: { color: '#fff', fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  touch: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  roundBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  info: { flex: 1, textAlign: 'center', color: '#BDBDB8', fontSize: 13 },
+  speed: {
+    minWidth: 44,
+    height: 32,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  speedText: { color: '#fff', fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   center: { alignItems: 'center', justifyContent: 'center' },
   bigPlay: {
     width: 72,
@@ -191,10 +229,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  error: { color: '#fff', fontSize: 15 },
-  bottom: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 10 },
-  time: { width: 40, color: '#fff', fontSize: 12, fontVariant: ['tabular-nums'] },
-  barHit: { flex: 1, height: 32, justifyContent: 'center' },
+  error: { color: '#fff', fontSize: 15, lineHeight: 21, textAlign: 'center', paddingHorizontal: 32 },
+  bottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 6,
+    paddingTop: 10,
+  },
+  time: { width: 42, color: '#fff', fontSize: 12, fontVariant: ['tabular-nums'] },
+  timeRight: { textAlign: 'right', color: '#BDBDB8', marginRight: 10 },
+  barHit: { flex: 1, height: 44, justifyContent: 'center' },
   bar: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
   barFill: { height: '100%', backgroundColor: '#fff' },
 });
