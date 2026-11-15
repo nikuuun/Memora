@@ -22,6 +22,10 @@ export async function openDeck(filter: Filter, title: string) {
   router.push('/deck');
 }
 
+export function openPlayer(id: string) {
+  router.push({ pathname: '/player', params: { id } });
+}
+
 /** Reviewed → To review, with undo. */
 export async function reviewAgain(filter: Filter) {
   const rows = await rowsWhere(filter);

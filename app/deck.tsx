@@ -9,6 +9,7 @@ import { ScreenHeader } from '../src/components/ScreenHeader';
 import { SwipeCard, type SwipeDirection } from '../src/components/SwipeCard';
 import { setOne } from '../src/db/actions';
 import { STATUS, type Row, type Status } from '../src/db/db';
+import { openPlayer } from '../src/library/session';
 import { useLibrary } from '../src/library/store';
 import { colors, formatCount, radius, space } from '../src/theme';
 
@@ -54,7 +55,7 @@ export default function DeckScreen() {
             {[rows[index + 1], current]
               .filter((r): r is Row => !!r)
               .map((r) => (
-                <SwipeCard key={r.id} item={r} isTop={r.id === current.id} onSwiped={decide} />
+                <SwipeCard key={r.id} item={r} isTop={r.id === current.id} onSwiped={decide} onPlay={openPlayer} />
               ))}
           </View>
           <Text style={styles.hint}>Swipe left to mark, right to keep. Kept photos move to Reviewed.</Text>

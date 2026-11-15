@@ -20,6 +20,8 @@ type Props = {
   label?: string;
   onPress?: (id: string) => void;
   onLongPress?: (id: string) => void;
+  /** Videos: shows a play button that opens the player. */
+  onPlay?: (id: string) => void;
 };
 
 export const PhotoTile = memo(function PhotoTile({
@@ -33,6 +35,7 @@ export const PhotoTile = memo(function PhotoTile({
   label,
   onPress,
   onLongPress,
+  onPlay,
 }: Props) {
   return (
     <Pressable
@@ -45,11 +48,23 @@ export const PhotoTile = memo(function PhotoTile({
     >
       {/* Thumbnails are decoded at tile size, and cached on disk by expo-image. */}
       <Image source={{ uri }} style={styles.img} contentFit="cover" recyclingKey={id} transition={80} />
-      {duration != null && (
-        <View style={styles.duration}>
-          <Text style={styles.durationText}>{formatDuration(duration)}</Text>
-        </View>
-      )}
+      {duration != null &&
+        (onPlay ? (
+          // Its own button, so playing never toggles the selection underneath.
+          <Pressable
+            onPress={() => onPlay(id)}
+            accessibilityLabel={`Play video, ${formatDuration(duration)}`}
+            hitSlop={10}
+            style={[styles.duration, styles.play]}
+          >
+            <Ionicons name="play" size={10} color="#fff" />
+            <Text style={styles.durationText}>{formatDuration(duration)}</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.duration}>
+            <Text style={styles.durationText}>{formatDuration(duration)}</Text>
+          </View>
+        ))}
       {marked && !selected && (
         <View style={styles.markedBadge}>
           <Ionicons name="trash" size={12} color="#fff" />
@@ -78,6 +93,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.overlay,
   },
+  play: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
   durationText: { color: '#fff', fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
   markedBadge: {
     position: 'absolute',

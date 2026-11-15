@@ -10,7 +10,8 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="grid" />
         <Stack.Screen name="deck" />
-        <Stack.Screen name="review" options={{ presentation: 'modal', headerShown: true, title: 'Review' }} />
+        <Stack.Screen name="review" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="player" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
       </Stack>
     </GestureHandlerRootView>
   );
