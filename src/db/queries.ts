@@ -25,9 +25,20 @@ const TYPES: { id: string; label: string; source?: string }[] = [
   { id: 'type:screenshots', label: 'Screenshots', source: 'sub:screenshot' },
   { id: 'type:videos', label: 'Videos' },
   { id: 'type:longvideos', label: 'Long videos' },
-  { id: 'type:live', label: 'Live Photos', source: 'sub:live' },
+  { id: 'type:screenrecordings', label: 'Screen recordings', source: 'smart:screenrecordings' },
+  { id: 'type:favorites', label: 'Favorites', source: 'smart:favorites' },
   { id: 'type:selfies', label: 'Selfies', source: 'smart:selfies' },
+  { id: 'type:live', label: 'Live Photos', source: 'sub:live' },
+  { id: 'type:portrait', label: 'Portrait', source: 'sub:portrait' },
   { id: 'type:bursts', label: 'Bursts', source: 'smart:bursts' },
+  { id: 'type:panorama', label: 'Panoramas', source: 'sub:panorama' },
+  { id: 'type:slomo', label: 'Slo-mo', source: 'sub:slomo' },
+  { id: 'type:timelapse', label: 'Time-lapse', source: 'sub:timelapse' },
+  { id: 'type:cinematic', label: 'Cinematic', source: 'sub:cinematic' },
+  { id: 'type:spatial', label: 'Spatial', source: 'sub:spatial' },
+  { id: 'type:animated', label: 'Animated', source: 'smart:animated' },
+  { id: 'type:longexposure', label: 'Long exposure', source: 'smart:longexposure' },
+  { id: 'type:raw', label: 'RAW', source: 'smart:raw' },
 ];
 
 const scopeStatus = (scope: Scope) => (scope === 'todo' ? STATUS.todo : STATUS.reviewed);
@@ -142,7 +153,7 @@ export async function markedIds(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.id));
 }
 
-const MAX_SUGGESTED = 10;
+const MAX_SUGGESTED = 16;
 
 /**
  * Results for the current keywords.

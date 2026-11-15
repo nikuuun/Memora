@@ -8,6 +8,8 @@ export type SyncState = {
   firstRun: boolean;
   done: number;
   total: number;
+  /** Set when reading the library failed, so the screen can say so. */
+  error?: string;
 };
 
 export type Toast = { id: number; text: string; undo?: () => Promise<void> };
