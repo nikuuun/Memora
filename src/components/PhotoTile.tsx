@@ -54,11 +54,12 @@ export const PhotoTile = memo(function PhotoTile({
           <Pressable
             onPress={() => onPlay(id)}
             accessibilityLabel={`Play video, ${formatDuration(duration)}`}
-            hitSlop={10}
-            style={[styles.duration, styles.play]}
+            style={styles.playTouch}
           >
-            <Ionicons name="play" size={10} color="#fff" />
-            <Text style={styles.durationText}>{formatDuration(duration)}</Text>
+            <View style={[styles.duration, styles.play]}>
+              <Ionicons name="play" size={11} color="#fff" />
+              <Text style={styles.durationText}>{formatDuration(duration)}</Text>
+            </View>
           </Pressable>
         ) : (
           <View style={styles.duration}>
@@ -93,7 +94,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.overlay,
   },
-  play: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
+  // 44pt touch area in the corner (Apple's minimum); the visible pill sits inside it.
+  playTouch: { position: 'absolute', left: 0, top: 0, width: 64, height: 44 },
+  play: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
   durationText: { color: '#fff', fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
   markedBadge: {
     position: 'absolute',

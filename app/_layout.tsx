@@ -10,8 +10,13 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="grid" />
         <Stack.Screen name="deck" />
-        <Stack.Screen name="review" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="player" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
+        {/* Plain pushed screens: reliable safe areas, back swipe works, and the
+            player can open from Review without hiding behind it. */}
+        <Stack.Screen name="review" />
+        <Stack.Screen
+          name="player"
+          options={{ animation: 'fade', contentStyle: { backgroundColor: '#000' }, fullScreenGestureEnabled: true }}
+        />
       </Stack>
     </GestureHandlerRootView>
   );
