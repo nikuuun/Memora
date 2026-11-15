@@ -15,6 +15,31 @@ import { chunk, getDb, getMeta, marks, setMeta } from './db';
  */
 
 const MEDIA = [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video];
+/** Bump when what we extract changes, so existing installs re-read once. */
+const INDEX_VERSION = '2';
+
+/** iOS marks these on every asset, in any phone language. */
+const SUBTYPE_TAGS: Partial<Record<MediaLibrary.MediaSubtype, string>> = {
+  screenshot: 'sub:screenshot',
+  livePhoto: 'sub:live',
+  depthEffect: 'sub:portrait',
+  panorama: 'sub:panorama',
+  highFrameRate: 'sub:slomo',
+  timelapse: 'sub:timelapse',
+  videoCinematic: 'sub:cinematic',
+  spatialMedia: 'sub:spatial',
+};
+
+/** Built-in albums with no per-asset flag. Their names follow the phone's language; these match English. */
+const SMART_ALBUM_TAGS: Record<string, string> = {
+  selfies: 'smart:selfies',
+  bursts: 'smart:bursts',
+  favorites: 'smart:favorites',
+  'screen recordings': 'smart:screenrecordings',
+  animated: 'smart:animated',
+  'long exposure': 'smart:longexposure',
+  raw: 'smart:raw',
+};
 const NEWEST_FIRST: MediaLibrary.SortByValue[] = [[MediaLibrary.SortBy.creationTime, false]];
 const PAGE = 1000;
 const ROWS_PER_INSERT = 80; // 9 columns each: well under SQLite's parameter limit
@@ -30,9 +55,11 @@ export function syncLibrary(full = false): Promise<void> {
   }
   running = (async () => {
     try {
+      useLibrary.getState().setSync({ error: undefined });
       await doSync(full);
     } catch (e) {
       console.warn('Library sync failed', e);
+      useLibrary.getState().setSync({ error: e instanceof Error ? e.message : String(e) });
     } finally {
       useLibrary.getState().setSync({ running: false, firstRun: false });
       running = null;
@@ -68,6 +95,7 @@ async function doSync(full: boolean) {
   const head = await MediaLibrary.getAssetsAsync({ first: 1, mediaType: MEDIA, sortBy: NEWEST_FIRST });
   const fingerprint = `${head.totalCount}|${head.assets[0]?.id ?? ''}`;
   const previous = await getMeta('fingerprint');
+  if ((await getMeta('index_version')) !== INDEX_VERSION) full = true;
   if (!full && previous === fingerprint) return;
 
   const firstRun = previous == null;
@@ -94,12 +122,11 @@ async function doSync(full: boolean) {
           params,
         );
       }
-      // iOS tells us screenshots and Live Photos directly, in any phone language.
       const subtypeTags: [string, string][] = [];
       for (const a of page.assets) {
         for (const st of a.mediaSubtypes ?? []) {
-          if (st === 'screenshot') subtypeTags.push(['sub:screenshot', a.id]);
-          else if (st === 'livePhoto') subtypeTags.push(['sub:live', a.id]);
+          const tag = SUBTYPE_TAGS[st];
+          if (tag) subtypeTags.push([tag, a.id]);
         }
       }
       await insertTags(subtypeTags);
@@ -118,6 +145,7 @@ async function doSync(full: boolean) {
 
   await syncAlbums(full);
   await setMeta('fingerprint', fingerprint);
+  await setMeta('index_version', INDEX_VERSION);
   store.bump();
 }
 
@@ -149,15 +177,16 @@ async function syncAlbums(full: boolean) {
     const title = album.title.trim().toLowerCase();
     if (Platform.OS === 'ios') {
       if (album.type === 'smartAlbum') {
-        // Smart album names follow the phone's language; these match English.
-        if (title === 'selfies') wanted.push({ album, tags: ['smart:selfies'], userAlbum: false });
-        else if (title === 'bursts') wanted.push({ album, tags: ['smart:bursts'], userAlbum: false });
+        const tag = SMART_ALBUM_TAGS[title];
+        if (tag) wanted.push({ album, tags: [tag], userAlbum: false });
       } else if (album.type !== 'moment') {
         wanted.push({ album, tags: [`album:${album.id}`], userAlbum: true });
       }
     } else {
+      // Android albums are folders; a couple of them double as types.
       const tags = [`album:${album.id}`];
       if (title === 'screenshots') tags.push('sub:screenshot');
+      if (title === 'screen recordings' || title === 'screenrecorder') tags.push('smart:screenrecordings');
       wanted.push({ album, tags, userAlbum: true });
     }
   }

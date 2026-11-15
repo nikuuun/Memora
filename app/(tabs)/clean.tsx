@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MarkedBar, UndoToast } from '../../src/components/BottomBars';
 import { Chip } from '../../src/components/Chip';
 import { loadResults, loadTags, scopeCounts, type Group, type Scope, type Tag } from '../../src/db/queries';
+import { syncLibrary } from '../../src/db/sync';
 import { openDeck, openGrid, reviewAgain } from '../../src/library/session';
 import { useLibrary } from '../../src/library/store';
 import { useDbQuery } from '../../src/library/useDbQuery';
@@ -78,6 +79,15 @@ function Clean() {
         </View>
       )}
 
+      {sync.error && !sync.running && (
+        <View style={styles.errorCard}>
+          <Text style={styles.errorText}>Couldn’t finish reading your library. ({sync.error})</Text>
+          <Pressable style={styles.retry} onPress={() => syncLibrary(true)}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
+
       <View style={styles.segment}>
         <ScopeButton label="To review" count={counts?.todo} active={inTodo} onPress={() => pickScope('todo')} />
         <ScopeButton label="Reviewed" count={counts?.reviewed} active={!inTodo} onPress={() => pickScope('reviewed')} />
@@ -94,6 +104,9 @@ function Clean() {
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
+          onSubmitEditing={() => {
+            if (others[0]) toggleTag(others[0].id);
+          }}
           clearButtonMode="while-editing"
           accessibilityLabel="Search keywords"
         />
@@ -106,13 +119,22 @@ function Clean() {
         contentContainerStyle={styles.tagRow}
         style={styles.tagScroll}
       >
-        {visibleTags.map((t) => (
-          <Chip key={t.id} label={t.label} count={t.count} active={selected.includes(t.id)} onPress={() => toggleTag(t.id)} />
-        ))}
+        {visibleTags.map((t, i) => {
+          // A thin line between chosen tags, types, albums and years makes the row easier to scan.
+          const prev = visibleTags[i - 1];
+          const chosenNow = selected.includes(t.id);
+          const newSection = prev && (selected.includes(prev.id) !== chosenNow || (!chosenNow && prev.kind !== t.kind));
+          return (
+            <View key={t.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {newSection && <View style={styles.divider} />}
+              <Chip label={t.label} count={t.count} active={chosenNow} onPress={() => toggleTag(t.id)} />
+            </View>
+          );
+        })}
         {tags && visibleTags.length === 0 && <Text style={styles.noTags}>No keyword matches that search</Text>}
       </ScrollView>
 
-      <ScrollView contentContainerStyle={styles.results} keyboardShouldPersistTaps="handled">
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.results} keyboardShouldPersistTaps="handled">
         <View style={styles.headingRow}>
           <Text style={styles.heading}>
             {selected.length ? 'Groups' : inTodo ? 'Suggested groups' : 'Reviewed, by type'}
@@ -291,8 +313,23 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   searchInput: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 0 },
-  tagScroll: { flexGrow: 0 },
-  tagRow: { gap: 6, paddingHorizontal: space.lg, paddingTop: 10, paddingBottom: 4 },
+  // A ScrollView may shrink by default; this row must always keep its full height.
+  tagScroll: { flexGrow: 0, flexShrink: 0 },
+  tagRow: { gap: 6, paddingHorizontal: space.lg, paddingTop: 10, paddingBottom: 6, alignItems: 'center' },
+  divider: { width: 1, height: 20, backgroundColor: colors.line, marginHorizontal: 4 },
+  errorCard: {
+    marginHorizontal: space.lg,
+    marginBottom: 10,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+  },
+  errorText: { flex: 1, fontSize: 13, lineHeight: 18, color: colors.text },
+  retry: { height: 36, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.text, justifyContent: 'center' },
+  retryText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   noTags: { fontSize: 13, color: colors.muted, lineHeight: 36 },
   results: { paddingHorizontal: space.lg, paddingBottom: space.lg, gap: 10 },
   headingRow: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
