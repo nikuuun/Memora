@@ -1,25 +1,47 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors, space } from '../theme';
+import { colors, formatCount, radius } from '../theme';
 
-export function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+/** A small rectangular keyword tag with its count. */
+export function Chip({
+  label,
+  count,
+  active,
+  onPress,
+}: {
+  label: string;
+  count?: number;
+  active: boolean;
+  onPress: () => void;
+}) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.active]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={[styles.chip, active && styles.active]}
+    >
       <Text style={[styles.text, active && styles.activeText]}>{label}</Text>
+      {count != null && <Text style={[styles.count, active && styles.activeCount]}>{formatCount(count)}</Text>}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   chip: {
-    paddingHorizontal: space.md,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
+    height: 36,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.bg,
   },
   active: { backgroundColor: colors.text, borderColor: colors.text },
-  text: { fontSize: 13, color: colors.text },
+  text: { fontSize: 13, fontWeight: '500', color: colors.text },
   activeText: { color: colors.bg, fontWeight: '600' },
+  count: { fontSize: 12, color: colors.muted },
+  activeCount: { color: colors.mutedOnDark },
 });

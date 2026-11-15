@@ -41,7 +41,8 @@
           "savePhotosPermission": "Memora saves photos you take or edit to your library.",
           "isAccessMediaLocationEnabled": false
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,17 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors } from '../theme';
+import { colors, formatDuration } from '../theme';
 
 type Props = {
   id: string;
   uri: string;
   size: number;
-  isVideo?: boolean;
+  /** Seconds; set for videos. */
+  duration?: number;
+  /** Dark overlay + check: chosen in a selection. */
   selected?: boolean;
-  queued?: boolean;
+  /** Empty circle: selectable but not chosen ("keeping" in the grid). */
+  ring?: boolean;
+  /** Small marked badge, used in the Library grid. */
+  marked?: boolean;
+  label?: string;
   onPress?: (id: string) => void;
   onLongPress?: (id: string) => void;
 };
@@ -20,56 +26,94 @@ export const PhotoTile = memo(function PhotoTile({
   id,
   uri,
   size,
-  isVideo,
+  duration,
   selected,
-  queued,
+  ring,
+  marked,
+  label,
   onPress,
   onLongPress,
 }: Props) {
   return (
     <Pressable
       onPress={() => onPress?.(id)}
-      onLongPress={() => onLongPress?.(id)}
+      onLongPress={onLongPress ? () => onLongPress(id) : undefined}
       delayLongPress={250}
+      accessibilityLabel={label}
+      accessibilityState={selected != null ? { selected } : undefined}
       style={{ width: size, height: size, padding: 1 }}
     >
-      <Image source={{ uri }} style={styles.img} contentFit="cover" recyclingKey={id} transition={100} />
-      {isVideo && (
-        <View style={styles.corner}>
-          <Ionicons name="videocam" size={12} color="#fff" />
+      {/* Thumbnails are decoded at tile size, and cached on disk by expo-image. */}
+      <Image source={{ uri }} style={styles.img} contentFit="cover" recyclingKey={id} transition={80} />
+      {duration != null && (
+        <View style={styles.duration}>
+          <Text style={styles.durationText}>{formatDuration(duration)}</Text>
         </View>
       )}
-      {queued && (
-        <View style={styles.queued}>
-          <Ionicons name="trash" size={20} color="#fff" />
+      {marked && !selected && (
+        <View style={styles.markedBadge}>
+          <Ionicons name="trash" size={12} color="#fff" />
         </View>
       )}
       {selected && (
-        <View style={styles.check}>
-          <Ionicons name="checkmark-circle" size={22} color="#fff" />
+        <View style={styles.dim}>
+          <View style={styles.check}>
+            <Ionicons name="checkmark" size={14} color={colors.text} />
+          </View>
         </View>
       )}
+      {ring && !selected && <View style={styles.ring} />}
     </Pressable>
   );
 });
 
 const styles = StyleSheet.create({
   img: { flex: 1, backgroundColor: colors.surface },
-  corner: { position: 'absolute', left: 5, bottom: 5 },
-  queued: {
-    ...StyleSheet.absoluteFill,
-    margin: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  duration: {
+    position: 'absolute',
+    left: 6,
+    top: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: colors.overlay,
+  },
+  durationText: { color: '#fff', fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  markedBadge: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  check: {
+  dim: {
     ...StyleSheet.absoluteFill,
     margin: 1,
-    borderWidth: 3,
-    borderColor: colors.text,
+    backgroundColor: colors.dim,
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
-    padding: 4,
+    padding: 6,
+  },
+  check: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ring: {
+    position: 'absolute',
+    right: 7,
+    bottom: 7,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
 });

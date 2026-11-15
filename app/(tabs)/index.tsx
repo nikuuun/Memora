@@ -1,18 +1,21 @@
-import { useCallback, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PhotoTile } from '../../src/components/PhotoTile';
+import { markAssets, setOne } from '../../src/db/actions';
+import { STATUS } from '../../src/db/db';
+import { markedIds } from '../../src/db/queries';
+import { useDbQuery } from '../../src/library/useDbQuery';
 import { PermissionGate } from '../../src/photos/PermissionGate';
 import { usePhotos } from '../../src/photos/usePhotos';
-import { toQueued, useTrash, useTrashCount } from '../../src/trash/store';
-import { colors, space } from '../../src/theme';
+import { colors, formatCount, space } from '../../src/theme';
 
 const COLUMNS = 3;
-const ALL = { type: 'all', year: null } as const;
 
-/** Library: the familiar grid. Long-press to start selecting, then move to trash. */
+/** Library: the familiar grid. Long-press to start selecting, then mark for deletion. */
 export default function LibraryScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -25,15 +28,11 @@ export default function LibraryScreen() {
 
 function Library() {
   const { width } = useWindowDimensions();
-  const size = width / COLUMNS;
-  const { assets, loadMore } = usePhotos(ALL);
-  const queue = useTrash((s) => s.queue);
-  const trash = useTrash((s) => s.trash);
-  const restore = useTrash((s) => s.restore);
-  const trashCount = useTrashCount();
+  const { assets, loadMore } = usePhotos();
+  const marked = useDbQuery(markedIds, []) ?? new Set<string>();
 
   const [selecting, setSelecting] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -44,30 +43,24 @@ function Library() {
     });
   }, []);
 
-  const onPress = useCallback(
-    (id: string) => {
-      if (selecting) toggle(id);
-      else if (queue[id]) restore([id]); // tap a trashed photo to take it back out
-      // TODO: open a full-screen photo viewer
-    },
-    [selecting, toggle, queue, restore],
-  );
+  const onPress = (id: string) => {
+    if (selecting) toggle(id);
+    else if (marked.has(id)) void setOne(id, STATUS.marked, STATUS.todo); // tap a marked photo to unmark it
+    // TODO: open a full-screen viewer
+  };
 
-  const onLongPress = useCallback(
-    (id: string) => {
-      setSelecting(true);
-      toggle(id);
-    },
-    [toggle],
-  );
+  const onLongPress = (id: string) => {
+    setSelecting(true);
+    toggle(id);
+  };
 
   const exitSelect = () => {
     setSelecting(false);
     setSelected(new Set());
   };
 
-  const moveToTrash = () => {
-    trash(assets.filter((a) => selected.has(a.id)).map(toQueued));
+  const markSelected = async () => {
+    await markAssets(assets.filter((a) => selected.has(a.id)));
     exitSelect();
   };
 
@@ -79,51 +72,42 @@ function Library() {
             <Pressable onPress={exitSelect} hitSlop={8}>
               <Text style={styles.action}>Cancel</Text>
             </Pressable>
-            <Text style={styles.count}>{selected.size} selected</Text>
-            <Pressable onPress={moveToTrash} disabled={selected.size === 0} hitSlop={8}>
-              <Text style={[styles.action, { color: colors.danger, opacity: selected.size ? 1 : 0.4 }]}>
-                Trash
-              </Text>
+            <Text style={styles.count}>{formatCount(selected.size)} selected</Text>
+            <Pressable onPress={markSelected} disabled={selected.size === 0} hitSlop={8}>
+              <Text style={[styles.action, { fontWeight: '600', opacity: selected.size ? 1 : 0.4 }]}>Mark</Text>
             </Pressable>
           </>
         ) : (
           <>
             <Text style={styles.title}>Library</Text>
-            {trashCount > 0 && (
+            {marked.size > 0 && (
               <Pressable onPress={() => router.push('/review')} hitSlop={8}>
-                <Text style={styles.action}>Review {trashCount}</Text>
+                <Text style={styles.action}>Review {formatCount(marked.size)}</Text>
               </Pressable>
             )}
           </>
         )}
       </View>
 
-      <FlatList
+      <FlashList
         data={assets}
         keyExtractor={(a) => a.id}
         numColumns={COLUMNS}
+        extraData={{ selected, marked, selecting }}
+        onEndReached={loadMore}
+        onEndReachedThreshold={1.5}
         renderItem={({ item }) => (
           <PhotoTile
             id={item.id}
             uri={item.uri}
-            size={size}
-            isVideo={item.mediaType === 'video'}
-            queued={!!queue[item.id]}
-            selected={selected.has(item.id)}
+            size={width / COLUMNS}
+            duration={item.mediaType === 'video' ? item.duration : undefined}
+            marked={marked.has(item.id)}
+            selected={selecting ? selected.has(item.id) : undefined}
             onPress={onPress}
             onLongPress={onLongPress}
           />
         )}
-        getItemLayout={(_, index) => ({
-          length: size,
-          offset: size * Math.floor(index / COLUMNS),
-          index,
-        })}
-        onEndReached={loadMore}
-        onEndReachedThreshold={1.5}
-        windowSize={9}
-        removeClippedSubviews
-        extraData={{ selected, queue, selecting }}
       />
     </View>
   );
@@ -138,7 +122,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: space.lg,
   },
-  title: { fontSize: 28, fontWeight: '700', color: colors.text },
+  title: { fontSize: 28, fontWeight: '700', letterSpacing: -0.5, color: colors.text },
   count: { fontSize: 16, fontWeight: '600', color: colors.text },
   action: { fontSize: 16, color: colors.text },
 });

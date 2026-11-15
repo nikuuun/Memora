@@ -8,10 +8,9 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="review"
-          options={{ presentation: 'modal', headerShown: true, title: 'Review trash' }}
-        />
+        <Stack.Screen name="grid" />
+        <Stack.Screen name="deck" />
+        <Stack.Screen name="review" options={{ presentation: 'modal', headerShown: true, title: 'Review' }} />
       </Stack>
     </GestureHandlerRootView>
   );
