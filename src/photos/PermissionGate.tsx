@@ -1,5 +1,7 @@
 import * as MediaLibrary from 'expo-media-library/legacy';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
+
+import { startLibrarySync } from '../db/sync';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, space } from '../theme';
@@ -42,6 +44,7 @@ export function PermissionGate({ children }: { children: ReactNode }) {
 
   return (
     <View style={{ flex: 1 }}>
+      <StartSync />
       {perm.accessPrivileges === 'limited' && (
         <Pressable style={styles.banner} onPress={() => Linking.openSettings()}>
           <Text style={styles.bannerText}>
@@ -52,6 +55,14 @@ export function PermissionGate({ children }: { children: ReactNode }) {
       {children}
     </View>
   );
+}
+
+/** Indexing starts as soon as we can see the photos. Safe to mount more than once. */
+function StartSync() {
+  useEffect(() => {
+    startLibrarySync();
+  }, []);
+  return null;
 }
 
 const styles = StyleSheet.create({
