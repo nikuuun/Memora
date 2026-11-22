@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Memora",
+    "slug": "memora",
+    "scheme": "memora",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Memora accesses your photos so you can organize and clean them on your device.",
+          "savePhotosPermission": "Memora may save photos you create to your library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ]
+    }
+  }
+}
