@@ -1,7 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PhotoTile } from '../../src/components/PhotoTile';
@@ -42,14 +42,28 @@ function Picker({ albumId }: { albumId: string }) {
     });
   }, []);
 
-  const add = () => {
-    // Videos come later; Drive uploads of big files need background upload.
-    addPhotos(
-      albumId,
-      assets.filter((a) => selected.has(a.id)).map((a) => ({ id: a.id, uri: a.uri })),
-    );
-    router.back();
+  const sample = useShared((s) => s.mode === 'sample');
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const add = async () => {
+    // Videos come later; big files need uploads that carry on in the background.
+    const picked = assets.filter((a) => selected.has(a.id)).map((a) => ({ id: a.id, uri: a.uri }));
+    setProgress({ done: 0, total: picked.length });
+    try {
+      const { failed } = await addPhotos(albumId, picked, (done, total) => setProgress({ done, total }));
+      router.back();
+      if (failed) {
+        Alert.alert(
+          `${photoCount(failed)} didn’t upload`,
+          'Check your connection and add them again. Photos stored only in iCloud need to download first.',
+        );
+      }
+    } catch (e) {
+      setProgress(null);
+      Alert.alert('Upload stopped', e instanceof Error ? e.message : 'Please try again.');
+    }
   };
+  const uploading = progress != null;
 
   const photos = assets.filter((a) => a.mediaType !== 'video');
 
@@ -70,16 +84,32 @@ function Picker({ albumId }: { albumId: string }) {
             selected={selected.has(item.id)}
             ring
             label={selected.has(item.id) ? 'Selected' : 'Not selected'}
-            onPress={toggle}
+            onPress={uploading ? undefined : toggle}
           />
         )}
       />
       <View style={styles.footer}>
-        <Pressable style={[styles.addBtn, !selected.size && { opacity: 0.4 }]} onPress={add} disabled={!selected.size}>
-          <Text style={styles.addText}>{selected.size ? `Add ${photoCount(selected.size)}` : 'Choose photos'}</Text>
+        <Pressable
+          style={[styles.addBtn, (!selected.size || uploading) && { opacity: 0.5 }]}
+          onPress={add}
+          disabled={!selected.size || uploading}
+        >
+          <Text style={styles.addText}>
+            {progress
+              ? `Uploading ${progress.done} of ${progress.total}…`
+              : selected.size
+                ? `Add ${photoCount(selected.size)}`
+                : 'Choose photos'}
+          </Text>
         </Pressable>
         <Text style={styles.note}>
-          {selected.size >= MAX ? `Up to ${MAX} at a time.` : 'Preview: photos stay on this phone for now.'}
+          {uploading
+            ? 'Keep Memora open until it finishes.'
+            : selected.size >= MAX
+              ? `Up to ${MAX} at a time.`
+              : sample
+                ? 'Sample album: photos stay on this phone.'
+                : 'Uploaded to Google Drive, resized to save space.'}
         </Text>
       </View>
     </View>

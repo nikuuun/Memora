@@ -5,9 +5,13 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "memora",
+    "scheme": [
+      "memora",
+      "com.googleusercontent.apps.3175320174-8b2338h3id3vgq3sn7esqeo1cbtkvk6a"
+    ],
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.memora.app",
       "icon": "./assets/expo.icon"
     },
     "android": {
@@ -37,13 +41,14 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Memora shows your photos so you can sort and clean them. Everything stays on your phone.",
-          "savePhotosPermission": "Memora saves photos you take or edit to your library.",
+          "photosPermission": "Memora shows your photos so you can sort and clean them. Only photos you add to a shared album leave your phone.",
+          "savePhotosPermission": "Memora saves photos from your shared albums to your library.",
           "isAccessMediaLocationEnabled": false
         }
       ],
       "expo-sqlite",
-      "expo-video"
+      "expo-video",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

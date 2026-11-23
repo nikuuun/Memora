@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { initShared } from '../src/shared/store';
 import { colors } from '../src/theme';
 
 // Keep the splash up until the fonts are ready, so text never jumps fonts.
@@ -27,6 +28,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
+
+  // Pick up a saved Google sign-in and load shared albums in the background.
+  useEffect(() => {
+    void initShared();
+  }, []);
 
   if (!ready) return null;
 

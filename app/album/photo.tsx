@@ -20,13 +20,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '../../src/components/Text';
 import { ZoomableImage } from '../../src/components/ZoomableImage';
 import { Avatar } from '../../src/shared/Avatars';
-import { ME, type SharedPhoto, canRemove, displayName, isOnThisPhone, timeAgo, useShared } from '../../src/shared/store';
+import {
+  type SharedPhoto,
+  canRemove,
+  displayName,
+  imageSource,
+  isMe,
+  isOnThisPhone,
+  timeAgo,
+  useShared,
+} from '../../src/shared/store';
 import { colors } from '../../src/theme';
 
 /** Save a copy of someone's photo to this phone's Photos app. */
 async function saveToPhone(photo: SharedPhoto) {
   const file = new File(Paths.cache, `memora-${photo.id}.jpg`);
-  if (!file.exists) await File.downloadFileAsync(photo.uri, file);
+  const source = imageSource(photo, 'full');
+  if (!file.exists) await File.downloadFileAsync(source.uri ?? photo.uri, file, { headers: source.headers });
   await MediaLibrary.saveToLibraryAsync(file.uri);
   file.delete();
 }
@@ -84,7 +94,7 @@ export default function SharedPhotoScreen() {
   };
 
   const confirmRemove = () => {
-    const mine = current.addedBy === ME;
+    const mine = isMe(current.addedBy);
     Alert.alert(
       `Remove from “${album.name}”?`,
       `Everyone in the album will stop seeing it. It isn’t deleted from ${mine ? 'your' : 'anyone’s'} phone.`,
@@ -93,11 +103,16 @@ export default function SharedPhotoScreen() {
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            try {
+              await removePhoto(album.id, current.id);
+            } catch (e) {
+              Alert.alert('Couldn’t remove the photo', e instanceof Error ? e.message : 'Please try again.');
+              return;
+            }
+            setZoomed(false);
             if (photos.length === 1) router.back();
             else if (index >= photos.length - 1) setIndex(photos.length - 2);
-            setZoomed(false);
-            removePhoto(album.id, current.id);
           },
         },
       ],
@@ -120,7 +135,7 @@ export default function SharedPhotoScreen() {
         windowSize={3}
         renderItem={({ item }) => (
           <ZoomableImage
-            uri={item.uri}
+            source={imageSource(item, 'full')}
             width={width}
             height={height}
             onZoomChange={setZoomed}

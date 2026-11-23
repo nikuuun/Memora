@@ -2,12 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '../../src/components/Text';
 import { Avatar, AvatarStack } from '../../src/shared/Avatars';
-import { type Album, displayName, peopleCount, photoCount, useShared } from '../../src/shared/store';
+import { type Album, displayName, imageSource, peopleCount, photoCount, useShared } from '../../src/shared/store';
 import { colors, eyebrowStyle, fonts, radius, space } from '../../src/theme';
 
 const COLUMNS = 3;
@@ -16,6 +16,8 @@ const COLUMNS = 3;
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const album = useShared((s) => s.albums.find((a) => a.id === id));
+  const loading = useShared((s) => s.loading);
+  const refresh = useShared((s) => s.refresh);
   const { width } = useWindowDimensions();
 
   if (!album) {
@@ -52,6 +54,9 @@ export default function AlbumScreen() {
           data={album.photos}
           numColumns={COLUMNS}
           keyExtractor={(p) => p.id}
+          refreshControl={
+            album.source === 'drive' ? <RefreshControl refreshing={loading} onRefresh={refresh} /> : undefined
+          }
           ListHeaderComponent={<Header album={album} />}
           renderItem={({ item }) => (
             <Pressable
@@ -59,7 +64,7 @@ export default function AlbumScreen() {
               onPress={() => router.push({ pathname: '/album/photo', params: { id: album.id, photo: item.id } })}
               accessibilityLabel={`Photo added by ${displayName(album, item.addedBy)}. Open full screen`}
             >
-              <Image source={{ uri: item.uri }} style={styles.photo} contentFit="cover" recyclingKey={item.id} transition={80} />
+              <Image source={imageSource(item)} style={styles.photo} contentFit="cover" recyclingKey={item.id} transition={80} />
               <View style={styles.by}>
                 <Avatar album={album} email={item.addedBy} size={20} />
               </View>
@@ -79,13 +84,13 @@ export default function AlbumScreen() {
 }
 
 function Header({ album }: { album: Album }) {
-  const cover = album.photos[0]?.uri;
+  const cover = album.photos[0];
   const since = new Date(album.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   return (
     <View style={styles.header}>
       <View style={styles.hero}>
         {cover ? (
-          <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
+          <Image source={imageSource(cover)} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
         ) : (
           <Ionicons name="images-outline" size={32} color={colors.muted} />
         )}

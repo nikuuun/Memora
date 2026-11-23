@@ -30,7 +30,7 @@ export function PermissionGate({ children }: { children: ReactNode }) {
       <View style={styles.center}>
         <Text style={styles.title}>Let Memora see your photos</Text>
         <Text style={styles.body}>
-          Everything is sorted on your phone. Nothing is uploaded, and nothing is deleted until you
+          Everything is sorted on your phone. Only photos you add to a shared album are uploaded, and nothing is deleted until you
           confirm.
         </Text>
         <Pressable

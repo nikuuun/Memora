@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ScreenHeader } from '../../src/components/ScreenHeader';
@@ -12,14 +12,28 @@ import { colors, eyebrowStyle, fonts, radius, space } from '../../src/theme';
 /** Name the album and list the Google accounts to invite as editors. */
 export default function NewAlbumScreen() {
   const createAlbum = useShared((s) => s.createAlbum);
+  const sample = useShared((s) => s.mode === 'sample');
   const [name, setName] = useState('');
   const [emails, setEmails] = useState<string[]>([]);
-  const ready = name.trim().length > 0;
+  const [busy, setBusy] = useState(false);
+  const ready = name.trim().length > 0 && !busy;
 
-  const create = () => {
+  const create = async () => {
     if (!ready) return;
-    const id = createAlbum(name.trim(), emails);
-    router.replace(`/album/${id}`);
+    setBusy(true);
+    try {
+      const { id, failed } = await createAlbum(name.trim(), emails);
+      router.replace(`/album/${id}`);
+      if (failed.length) {
+        Alert.alert(
+          'Some invites didn’t send',
+          `The album is ready, but these couldn’t be invited: ${failed.join(', ')}. Check the addresses and try again from Invite.`,
+        );
+      }
+    } catch (e) {
+      setBusy(false);
+      Alert.alert('Couldn’t create the album', e instanceof Error ? e.message : 'Please try again.');
+    }
   };
 
   return (
@@ -64,11 +78,17 @@ export default function NewAlbumScreen() {
           </View>
 
           <Pressable style={[styles.createBtn, !ready && { opacity: 0.4 }]} onPress={create} disabled={!ready}>
-            <Text style={styles.createText}>
-              {emails.length ? `Create and invite ${emails.length}` : 'Create album'}
-            </Text>
+            {busy ? (
+              <ActivityIndicator color={colors.card} />
+            ) : (
+              <Text style={styles.createText}>
+                {emails.length ? `Create and invite ${emails.length}` : 'Create album'}
+              </Text>
+            )}
           </Pressable>
-          <Text style={styles.preview}>Preview: invites aren’t sent until Google sign-in is added.</Text>
+          {sample && (
+            <Text style={styles.preview}>Sample mode: sign in with Google on the Shared tab to send real invites.</Text>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

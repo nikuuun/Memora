@@ -1,174 +1,453 @@
+import { File } from 'expo-file-system';
+import type { ImageSource } from 'expo-image';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { create } from 'zustand';
 
-// Shared albums. For now this is sample data kept in memory, so the screens can
-// be tried without signing in. Each field maps onto Google Drive later:
-//   Album        → a Drive folder the app created (name = folder name)
+import * as drive from '../drive/api';
+import { currentToken, getAccessToken, restoreSignIn, SignedOutError, signOut, useAuth } from '../drive/auth';
+import { UPLOAD_CONCURRENCY, UPLOAD_MAX_SIDE, UPLOAD_QUALITY } from '../drive/config';
+import { SAMPLE_ME, sampleAlbums } from './samples';
+
+// Shared albums. Signed in with Google, they live in Google Drive:
+//   Album        → a folder the app made (name = folder name)
 //   members      → the folder's permissions (owner + editors, by Google email)
-//   SharedPhoto  → a file in the folder (addedBy = who uploaded it, addedAt = createdTime)
+//   SharedPhoto  → an image in the folder (addedBy = who uploaded it)
+// Signed out, the same screens show sample albums kept in memory.
 
 export type Role = 'owner' | 'editor';
-export type Member = { email: string; name?: string; role: Role };
-export type SharedPhoto = { id: string; uri: string; addedBy: string; addedAt: number };
-export type Album = { id: string; name: string; createdAt: number; members: Member[]; photos: SharedPhoto[] };
-
-/** The signed-in person. Becomes the Google account after sign-in is added. */
-export const ME = 'you@example.com';
-
-const MIN = 60_000;
-const HOUR = 60 * MIN;
-const DAY = 24 * HOUR;
-
-// Same pictures as linhant's Figma prototype.
-// fm=jpg so a saved copy is a normal JPEG the Photos app accepts.
-const pic = (id: string) => `https://images.unsplash.com/${id}?fm=jpg&w=1600&q=80`;
-const P = {
-  beach: pic('photo-1553670440-f4fa1dfeabf4'),
-  walk: pic('photo-1725975735073-61ae4e150312'),
-  field: pic('photo-1615574147300-62cc3e37868f'),
-  coast: pic('photo-1700908608272-14425ac565e9'),
-  path: pic('photo-1734660264096-c1cc4768454f'),
+export type Member = { email: string; role: Role; permissionId?: string };
+export type SharedPhoto = {
+  id: string;
+  /** Grid-size image. */
+  uri: string;
+  /** Full-size image, when different from `uri`. */
+  full?: string;
+  /** Drive images need the Google token in the request. */
+  auth?: boolean;
+  addedBy: string;
+  addedAt: number;
+  /** Photos added together share a batch ("Jamie added 8 photos"). */
+  batch?: string;
+  /** Just added here; kept until Drive's search catches up. */
+  localUntil?: number;
+};
+export type Album = {
+  id: string;
+  source: 'sample' | 'drive';
+  name: string;
+  createdAt: number;
+  members: Member[];
+  photos: SharedPhoto[];
+  /** Display names we know, by email. */
+  names: Record<string, string>;
+  localUntil?: number;
 };
 
-let nextId = 1;
-const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${nextId++}`;
-
-function batch(by: string, ago: number, uris: string[]): SharedPhoto[] {
-  const at = Date.now() - ago;
-  return uris.map((uri) => ({ id: newId('p'), uri, addedBy: by, addedAt: at }));
-}
-
-function sampleAlbums(): Album[] {
-  return [
-    {
-      id: 'saltwater',
-      name: 'Saltwater days',
-      createdAt: Date.now() - 9 * DAY,
-      members: [
-        { email: ME, name: 'You', role: 'owner' },
-        { email: 'jamie@example.com', name: 'Jamie Lee', role: 'editor' },
-        { email: 'priya@example.com', name: 'Priya Shah', role: 'editor' },
-      ],
-      photos: [
-        ...batch('jamie@example.com', 12 * MIN, [P.beach, P.coast, P.walk, P.path, P.field, P.beach, P.coast, P.walk]),
-        ...batch('priya@example.com', 2 * DAY, [P.field, P.path, P.coast]),
-        ...batch(ME, 8 * DAY, [P.walk, P.beach, P.path, P.field]),
-      ],
-    },
-    {
-      id: 'sunday',
-      name: 'Sunday, slowly',
-      createdAt: Date.now() - 20 * DAY,
-      members: [
-        { email: ME, name: 'You', role: 'owner' },
-        { email: 'alex@example.com', name: 'Alex Kim', role: 'editor' },
-      ],
-      photos: [...batch('alex@example.com', 5 * HOUR, [P.walk, P.field]), ...batch(ME, 19 * DAY, [P.path, P.walk, P.beach])],
-    },
-    {
-      id: 'south',
-      name: 'Somewhere south',
-      createdAt: Date.now() - 40 * DAY,
-      members: [
-        { email: 'maya@example.com', name: 'Maya Ortiz', role: 'owner' },
-        { email: ME, name: 'You', role: 'editor' },
-        { email: 'jamie@example.com', name: 'Jamie Lee', role: 'editor' },
-        { email: 'sam@example.com', name: 'Sam Rivera', role: 'editor' },
-      ],
-      photos: [
-        ...batch('sam@example.com', 3 * DAY, [P.coast, P.field]),
-        ...batch('maya@example.com', 38 * DAY, [P.coast, P.beach, P.path, P.walk, P.field]),
-      ],
-    },
-  ];
-}
+const KEEP_LOCAL_MS = 2 * 60_000;
 
 type SharedState = {
+  mode: 'sample' | 'drive';
+  /** Email of the person using the app. */
+  me: string;
   albums: Album[];
-  createAlbum: (name: string, emails: string[]) => string;
-  addPhotos: (albumId: string, photos: { id: string; uri: string }[]) => void;
-  removePhoto: (albumId: string, photoId: string) => void;
-  invite: (albumId: string, emails: string[]) => void;
-  removeMember: (albumId: string, email: string) => void;
-  leave: (albumId: string) => void;
+  loading: boolean;
+  error: string | null;
+
+  refresh: () => Promise<void>;
+  createAlbum: (name: string, emails: string[]) => Promise<{ id: string; failed: string[] }>;
+  addPhotos: (
+    albumId: string,
+    assets: { id: string; uri: string }[],
+    onProgress?: (done: number, total: number) => void,
+  ) => Promise<{ failed: number }>;
+  removePhoto: (albumId: string, photoId: string) => Promise<void>;
+  invite: (albumId: string, emails: string[]) => Promise<{ failed: string[] }>;
+  removeMember: (albumId: string, email: string) => Promise<void>;
+  leave: (albumId: string) => Promise<void>;
 };
 
 const update = (albums: Album[], id: string, fn: (a: Album) => Album) => albums.map((a) => (a.id === id ? fn(a) : a));
+const lastActive = (a: Album) => Math.max(a.createdAt, ...a.photos.map((p) => p.addedAt));
+const sortAlbums = (albums: Album[]) => [...albums].sort((a, b) => lastActive(b) - lastActive(a));
 
-export const useShared = create<SharedState>()((set) => ({
-  albums: sampleAlbums(),
+const message = (e: unknown) =>
+  e instanceof SignedOutError ? e.message : e instanceof Error ? e.message : 'Something went wrong. Please try again.';
 
-  createAlbum: (name, emails) => {
-    const id = newId('a');
-    const album: Album = {
-      id,
-      name,
-      createdAt: Date.now(),
-      members: [{ email: ME, name: 'You', role: 'owner' }, ...emails.map((email) => ({ email, role: 'editor' as const }))],
-      photos: [],
-    };
-    set((s) => ({ albums: [album, ...s.albums] }));
-    return id;
-  },
+// ---- Drive → app shapes ----
 
-  addPhotos: (albumId, photos) => {
-    const at = Date.now();
-    set((s) => ({
-      albums: update(s.albums, albumId, (a) => ({
-        ...a,
-        photos: [...photos.map((p) => ({ id: newId('p'), uri: p.uri, addedBy: ME, addedAt: at })), ...a.photos],
-      })),
-    }));
-  },
+const emailOf = (u?: drive.DriveUser) => (u?.emailAddress ?? u?.displayName ?? 'someone').toLowerCase();
 
-  removePhoto: (albumId, photoId) =>
-    set((s) => ({
-      albums: update(s.albums, albumId, (a) => ({ ...a, photos: a.photos.filter((p) => p.id !== photoId) })),
-    })),
+function toPhoto(p: drive.DrivePhoto): SharedPhoto {
+  return {
+    id: p.id,
+    uri: drive.thumbUrl(p),
+    full: drive.fullUrl(p.id),
+    auth: true,
+    addedBy: emailOf(p.owners?.[0]),
+    addedAt: Date.parse(p.createdTime),
+    batch: p.appProperties?.memoraBatch,
+  };
+}
 
-  invite: (albumId, emails) =>
-    set((s) => ({
-      albums: update(s.albums, albumId, (a) => {
-        const have = new Set(a.members.map((m) => m.email));
-        const fresh = emails.filter((e) => !have.has(e)).map((email) => ({ email, role: 'editor' as const }));
-        return { ...a, members: [...a.members, ...fresh] };
-      }),
-    })),
+function toAlbum(f: drive.DriveFolder, perms: drive.DrivePermission[], files: drive.DrivePhoto[]): Album {
+  const names: Record<string, string> = {};
+  const owner = f.owners?.[0];
+  if (owner?.displayName) names[emailOf(owner)] = owner.displayName;
+  for (const p of perms) if (p.displayName && p.emailAddress) names[p.emailAddress.toLowerCase()] = p.displayName;
+  for (const file of files) {
+    const u = file.owners?.[0];
+    if (u?.displayName) names[emailOf(u)] = u.displayName;
+  }
 
-  removeMember: (albumId, email) =>
-    set((s) => ({
-      albums: update(s.albums, albumId, (a) => ({ ...a, members: a.members.filter((m) => m.email !== email) })),
-    })),
+  let members: Member[] = perms.map((p) => ({
+    email: (p.emailAddress ?? p.displayName ?? p.id).toLowerCase(),
+    role: p.role === 'owner' ? 'owner' : 'editor',
+    permissionId: p.id,
+  }));
+  // Editors can't always read the full list; at least show the owner.
+  if (!members.length && owner) members = [{ email: emailOf(owner), role: 'owner' }];
+  members.sort((a, b) => (a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : 0));
 
-  leave: (albumId) => set((s) => ({ albums: s.albums.filter((a) => a.id !== albumId) })),
-}));
+  return {
+    id: f.id,
+    source: 'drive',
+    name: f.name,
+    createdAt: Date.parse(f.createdTime),
+    members,
+    photos: files.map(toPhoto),
+    names,
+  };
+}
+
+/** Keeps photos and albums added on this phone that Drive's search hasn't caught up with. */
+function mergeLocal(local: Album[], fetched: Album[]): Album[] {
+  const now = Date.now();
+  const byId = new Map(fetched.map((a) => [a.id, a]));
+  const out = fetched.map((a) => {
+    const before = local.find((x) => x.id === a.id);
+    if (!before) return a;
+    const have = new Set(a.photos.map((p) => p.id));
+    const extra = before.photos.filter((p) => p.localUntil && p.localUntil > now && !have.has(p.id));
+    return extra.length ? { ...a, photos: [...extra, ...a.photos] } : a;
+  });
+  for (const a of local) if (a.localUntil && a.localUntil > now && !byId.has(a.id)) out.push(a);
+  return sortAlbums(out);
+}
+
+// ---- uploading ----
+
+/** Makes a JPEG copy of a camera-roll photo, at most UPLOAD_MAX_SIDE on the long side. */
+async function prepare(asset: { id: string; uri: string }) {
+  const info = await MediaLibrary.getAssetInfoAsync(asset.id, { shouldDownloadFromNetwork: true });
+  const sources = [info.localUri, asset.uri].filter((s): s is string => !!s);
+  let lastError: unknown;
+  for (const src of sources) {
+    try {
+      const ref = await ImageManipulator.ImageManipulator.manipulate(src, {
+        maxWidth: UPLOAD_MAX_SIDE,
+        maxHeight: UPLOAD_MAX_SIDE,
+      }).renderAsync();
+      const out = await ref.saveAsync({ format: ImageManipulator.SaveFormat.JPEG, compress: UPLOAD_QUALITY });
+      const base = (info.filename ?? 'photo').replace(/\.[^.]+$/, '');
+      return { uri: out.uri, name: `${base}.jpg` };
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError ?? new Error('Couldn’t read the photo.');
+}
+
+// ---- the store ----
+
+export const useShared = create<SharedState>()((set, get) => {
+  /** Sign-out or an expired sign-in: back to the samples. */
+  const toSamples = (error: string | null = null) =>
+    set({ mode: 'sample', me: SAMPLE_ME, albums: sampleAlbums(), loading: false, error });
+
+  const failed = async (e: unknown) => {
+    if (e instanceof SignedOutError) {
+      toSamples(e.message);
+      await signOut();
+    }
+    throw new Error(message(e));
+  };
+
+  return {
+    mode: 'sample',
+    me: SAMPLE_ME,
+    albums: sampleAlbums(),
+    loading: false,
+    error: null,
+
+    refresh: async () => {
+      const account = useAuth.getState().account;
+      if (!account) {
+        if (get().mode === 'drive') toSamples();
+        return;
+      }
+      if (get().mode !== 'drive') set({ mode: 'drive', me: account.email, albums: [] });
+      set({ loading: true, error: null });
+      try {
+        await getAccessToken();
+        const folders = await drive.listAlbums();
+        const albums = await Promise.all(
+          folders.map(async (f) => {
+            const [perms, files] = await Promise.all([
+              drive.listMembers(f.id).catch(() => [] as drive.DrivePermission[]),
+              drive.listPhotos(f.id),
+            ]);
+            return toAlbum(f, perms, files);
+          }),
+        );
+        set({ albums: mergeLocal(get().albums, albums), loading: false });
+      } catch (e) {
+        if (e instanceof SignedOutError) {
+          toSamples(e.message);
+          return;
+        }
+        set({ loading: false, error: message(e) });
+      }
+    },
+
+    createAlbum: async (name, emails) => {
+      if (get().mode === 'sample') {
+        const id = `sample-album-${Date.now()}`;
+        const album: Album = {
+          id,
+          source: 'sample',
+          name,
+          createdAt: Date.now(),
+          names: { [SAMPLE_ME]: 'You' },
+          members: [{ email: SAMPLE_ME, role: 'owner' }, ...emails.map((email) => ({ email, role: 'editor' as const }))],
+          photos: [],
+        };
+        set((s) => ({ albums: [album, ...s.albums] }));
+        return { id, failed: [] };
+      }
+      try {
+        const f = await drive.createAlbum(name);
+        const account = useAuth.getState().account;
+        const album: Album = {
+          ...toAlbum(f, [], []),
+          members: [{ email: get().me, role: 'owner' }],
+          names: account?.name ? { [get().me]: account.name } : {},
+          localUntil: Date.now() + KEEP_LOCAL_MS,
+        };
+        set((s) => ({ albums: [album, ...s.albums] }));
+        const { failed: notInvited } = await get().invite(f.id, emails);
+        return { id: f.id, failed: notInvited };
+      } catch (e) {
+        return failed(e);
+      }
+    },
+
+    addPhotos: async (albumId, assets, onProgress) => {
+      const me = get().me;
+      const batch = String(Date.now());
+      if (get().mode === 'sample') {
+        const at = Date.now();
+        set((s) => ({
+          albums: update(s.albums, albumId, (a) => ({
+            ...a,
+            photos: [
+              ...assets.map((p, i) => ({ id: `sample-add-${at}-${i}`, uri: p.uri, addedBy: me, addedAt: at, batch })),
+              ...a.photos,
+            ],
+          })),
+        }));
+        return { failed: 0 };
+      }
+
+      let next = 0;
+      let done = 0;
+      let bad = 0;
+      let signedOut: unknown = null;
+      onProgress?.(0, assets.length);
+
+      const worker = async () => {
+        while (!signedOut) {
+          const i = next++;
+          if (i >= assets.length) return;
+          const asset = assets[i];
+          try {
+            const file = await prepare(asset);
+            try {
+              const up = await drive.uploadPhoto(albumId, file.uri, file.name, 'image/jpeg', batch);
+              // Show the phone's own copy until Drive has a thumbnail ready.
+              const photo: SharedPhoto = {
+                id: up.id,
+                uri: asset.uri,
+                addedBy: me,
+                addedAt: Date.now(),
+                batch,
+                localUntil: Date.now() + KEEP_LOCAL_MS,
+              };
+              set((s) => ({ albums: update(s.albums, albumId, (a) => ({ ...a, photos: [photo, ...a.photos] })) }));
+            } finally {
+              try {
+                new File(file.uri).delete();
+              } catch {
+                // temp file already gone
+              }
+            }
+          } catch (e) {
+            if (e instanceof SignedOutError) signedOut = e;
+            else bad += 1;
+          }
+          done += 1;
+          onProgress?.(done, assets.length);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, assets.length) }, worker));
+      if (signedOut) return failed(signedOut);
+      return { failed: bad };
+    },
+
+    removePhoto: async (albumId, photoId) => {
+      const album = get().albums.find((a) => a.id === albumId);
+      const photo = album?.photos.find((p) => p.id === photoId);
+      if (!album || !photo) return;
+      if (album.source === 'drive') {
+        try {
+          await drive.removePhoto(albumId, photoId, photo.addedBy === get().me);
+        } catch (e) {
+          return failed(e);
+        }
+      }
+      set((s) => ({
+        albums: update(s.albums, albumId, (a) => ({ ...a, photos: a.photos.filter((p) => p.id !== photoId) })),
+      }));
+    },
+
+    invite: async (albumId, emails) => {
+      const album = get().albums.find((a) => a.id === albumId);
+      if (!album) return { failed: emails };
+      const fresh = emails.filter((e) => !album.members.some((m) => m.email === e));
+      if (album.source === 'sample') {
+        set((s) => ({
+          albums: update(s.albums, albumId, (a) => ({
+            ...a,
+            members: [...a.members, ...fresh.map((email) => ({ email, role: 'editor' as const }))],
+          })),
+        }));
+        return { failed: [] };
+      }
+      const account = useAuth.getState().account;
+      const from = account?.name ?? account?.email ?? 'A friend';
+      const added: Member[] = [];
+      const notInvited: string[] = [];
+      for (const email of fresh) {
+        try {
+          const p = await drive.invite(albumId, email, album.name, from);
+          added.push({ email, role: 'editor', permissionId: p.id });
+        } catch (e) {
+          if (e instanceof SignedOutError) return failed(e);
+          notInvited.push(email);
+        }
+      }
+      set((s) => ({ albums: update(s.albums, albumId, (a) => ({ ...a, members: [...a.members, ...added] })) }));
+      return { failed: notInvited };
+    },
+
+    removeMember: async (albumId, email) => {
+      const album = get().albums.find((a) => a.id === albumId);
+      const member = album?.members.find((m) => m.email === email);
+      if (!album || !member) return;
+      if (album.source === 'drive') {
+        if (!member.permissionId) throw new Error('Couldn’t find that person’s access. Pull down to refresh and try again.');
+        try {
+          await drive.removePermission(albumId, member.permissionId);
+        } catch (e) {
+          return failed(e);
+        }
+      }
+      set((s) => ({
+        albums: update(s.albums, albumId, (a) => ({ ...a, members: a.members.filter((m) => m.email !== email) })),
+      }));
+    },
+
+    leave: async (albumId) => {
+      const album = get().albums.find((a) => a.id === albumId);
+      if (!album) return;
+      if (album.source === 'drive') {
+        const mine = album.members.find((m) => m.email === get().me);
+        if (!mine?.permissionId) throw new Error('Couldn’t find your access to this album. Pull down to refresh and try again.');
+        try {
+          await drive.removePermission(albumId, mine.permissionId);
+        } catch (e) {
+          return failed(e);
+        }
+      }
+      set((s) => ({ albums: s.albums.filter((a) => a.id !== albumId) }));
+    },
+  };
+});
+
+/** At start-up: restore the saved Google sign-in, then load albums from Drive. */
+export async function initShared() {
+  await restoreSignIn();
+  if (useAuth.getState().status === 'signedIn') await useShared.getState().refresh();
+}
+
+/** After signing in or out on the Shared tab. */
+export async function afterSignIn() {
+  await useShared.getState().refresh();
+}
+export async function afterSignOut() {
+  await signOut();
+  useShared.setState({ mode: 'sample', me: SAMPLE_ME, albums: sampleAlbums(), error: null, loading: false });
+}
 
 // ---- helpers used by the screens ----
 
-export const isOwner = (album: Album, email = ME) => album.members.some((m) => m.email === email && m.role === 'owner');
+const me = () => useShared.getState().me;
+
+export const isMe = (email: string) => email === me();
+
+export const isOwner = (album: Album, email = me()) => album.members.some((m) => m.email === email && m.role === 'owner');
 
 /** You can take out photos you added; the album's owner can take out any. */
-export const canRemove = (album: Album, photo: SharedPhoto, email = ME) => photo.addedBy === email || isOwner(album, email);
+export const canRemove = (album: Album, photo: SharedPhoto) => photo.addedBy === me() || isOwner(album);
 
 /** Photos you added from this phone are already in your Photos app. */
 export const isOnThisPhone = (photo: SharedPhoto) => !/^https?:/.test(photo.uri);
 
+/** Image source for expo-image, with the Google token for Drive photos. */
+export function imageSource(photo: SharedPhoto, size: 'thumb' | 'full' = 'thumb'): ImageSource {
+  const uri = size === 'full' ? (photo.full ?? photo.uri) : photo.uri;
+  return {
+    uri,
+    cacheKey: `${photo.id}-${size}`,
+    headers: photo.auth ? { Authorization: `Bearer ${currentToken()}` } : undefined,
+  };
+}
+
+/** Full name if we know it, else the email. */
+export function fullName(album: Album, email: string) {
+  if (isMe(email)) return 'You';
+  return album.names[email] ?? email;
+}
+
 /** "You", a first name, or the part of the email before the @. */
 export function displayName(album: Album, email: string) {
-  if (email === ME) return 'You';
-  const m = album.members.find((x) => x.email === email);
-  return m?.name?.split(' ')[0] ?? email.split('@')[0];
+  if (isMe(email)) return 'You';
+  return album.names[email]?.split(' ')[0] ?? email.split('@')[0];
 }
 
 export function initials(album: Album, email: string) {
-  if (email === ME) return 'ME';
-  const m = album.members.find((x) => x.email === email);
-  const source = m?.name ?? email.split('@')[0];
+  if (isMe(email)) return 'ME';
+  const source = album.names[email] ?? email.split('@')[0];
   const parts = source.split(/[\s._-]+/).filter(Boolean);
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
 }
 
 export const photoCount = (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'}`;
 export const peopleCount = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`;
+
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
 
 export function timeAgo(at: number) {
   const d = Date.now() - at;
@@ -185,10 +464,14 @@ export function recentActivity(albums: Album[], limit = 4): Activity[] {
   const rows = new Map<string, Activity>();
   for (const album of albums) {
     for (const p of album.photos) {
-      const key = `${album.id}|${p.addedBy}|${p.addedAt}`;
+      // Photos without a batch tag (added in Drive itself) group by the hour.
+      const group = p.batch ?? String(Math.floor(p.addedAt / HOUR));
+      const key = `${album.id}|${p.addedBy}|${group}`;
       const row = rows.get(key);
-      if (row) row.count += 1;
-      else rows.set(key, { key, album, by: p.addedBy, count: 1, at: p.addedAt });
+      if (row) {
+        row.count += 1;
+        row.at = Math.max(row.at, p.addedAt);
+      } else rows.set(key, { key, album, by: p.addedBy, count: 1, at: p.addedAt });
     }
   }
   return [...rows.values()].sort((a, b) => b.at - a.at).slice(0, limit);

@@ -1,4 +1,4 @@
-import { Image } from 'expo-image';
+import { Image, type ImageSource } from 'expo-image';
 import { StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -7,7 +7,7 @@ const MAX_SCALE = 5;
 const DOUBLE_TAP_SCALE = 2.5;
 
 type Props = {
-  uri: string;
+  source: ImageSource;
   width: number;
   height: number;
   /** Told when the photo goes from fitted to zoomed in, and back. */
@@ -20,7 +20,7 @@ type Props = {
  * A whole photo, fitted to the screen. Pinch or double-tap to zoom, drag to look
  * around while zoomed. When not zoomed, drags pass through so the pager can swipe.
  */
-export function ZoomableImage({ uri, width, height, onZoomChange, onTap }: Props) {
+export function ZoomableImage({ source, width, height, onZoomChange, onTap }: Props) {
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const x = useSharedValue(0);
@@ -116,7 +116,7 @@ export function ZoomableImage({ uri, width, height, onZoomChange, onTap }: Props
   return (
     <GestureDetector gesture={gesture}>
       <Animated.View style={[{ width, height }, style]}>
-        <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
+        <Image source={source} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
       </Animated.View>
     </GestureDetector>
   );
