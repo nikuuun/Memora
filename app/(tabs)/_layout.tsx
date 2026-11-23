@@ -24,7 +24,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: icon('home-outline') }} />
-      <Tabs.Screen name="library" options={{ title: 'Library', tabBarIcon: icon('images-outline') }} />
+      <Tabs.Screen name="shared" options={{ title: 'Shared', tabBarIcon: icon('people-outline') }} />
       <Tabs.Screen name="clean" options={{ title: 'Clean', tabBarIcon: icon('sparkles-outline') }} />
       <Tabs.Screen name="camera" options={{ title: 'Camera', tabBarIcon: icon('camera-outline') }} />
       <Tabs.Screen name="create" options={{ title: 'Create', tabBarIcon: icon('albums-outline') }} />

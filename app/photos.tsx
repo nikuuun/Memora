@@ -1,24 +1,26 @@
+import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
+import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PhotoTile } from '../../src/components/PhotoTile';
-import { ReviewPill } from '../../src/components/ReviewPill';
-import { Text } from '../../src/components/Text';
-import { markAssets, setOne } from '../../src/db/actions';
-import { STATUS } from '../../src/db/db';
-import { markedIds } from '../../src/db/queries';
-import { openPlayer } from '../../src/library/session';
-import { useDbQuery } from '../../src/library/useDbQuery';
-import { PermissionGate } from '../../src/photos/PermissionGate';
-import { usePhotos } from '../../src/photos/usePhotos';
-import { colors, formatCount, space, titleStyle } from '../../src/theme';
+import { PhotoTile } from '../src/components/PhotoTile';
+import { ReviewPill } from '../src/components/ReviewPill';
+import { Text } from '../src/components/Text';
+import { markAssets, setOne } from '../src/db/actions';
+import { STATUS } from '../src/db/db';
+import { markedIds } from '../src/db/queries';
+import { openPlayer } from '../src/library/session';
+import { useDbQuery } from '../src/library/useDbQuery';
+import { PermissionGate } from '../src/photos/PermissionGate';
+import { usePhotos } from '../src/photos/usePhotos';
+import { colors, formatCount, space, titleStyle } from '../src/theme';
 
 const COLUMNS = 3;
 
-/** Library: the familiar grid. Long-press to start selecting, then mark for deletion. */
-export default function LibraryScreen() {
+/** All photos: the familiar grid, opened from Home's "See all". Long-press to start selecting, then mark for deletion. */
+export default function PhotosScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <PermissionGate>
@@ -81,7 +83,12 @@ function Library() {
           </>
         ) : (
           <>
-            <Text style={styles.title}>Library</Text>
+            <View style={styles.titleRow}>
+              <Pressable onPress={() => router.back()} style={styles.back} accessibilityLabel="Back" hitSlop={4}>
+                <Ionicons name="chevron-back" size={24} color={colors.text} />
+              </Pressable>
+              <Text style={styles.title}>All photos</Text>
+            </View>
             {marked.size > 0 && <ReviewPill count={marked.size} />}
           </>
         )}
@@ -121,6 +128,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: space.lg,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', marginLeft: -12 },
+  back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: titleStyle,
   count: { fontSize: 16, fontWeight: '600', color: colors.text },
   action: { fontSize: 16, color: colors.text },

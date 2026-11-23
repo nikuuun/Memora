@@ -88,7 +88,7 @@ function Home() {
 
       <View style={styles.sectionRow}>
         <Text style={styles.section}>Recent moments</Text>
-        <Pressable onPress={() => router.push('/library')} hitSlop={8} style={styles.linkTouch}>
+        <Pressable onPress={() => router.push('/photos')} hitSlop={8} style={styles.linkTouch}>
           <Text style={styles.link}>See all →</Text>
         </Pressable>
       </View>
@@ -97,8 +97,8 @@ function Home() {
           {recent.map((a) => (
             <Pressable
               key={a.id}
-              onPress={() => (a.mediaType === 'video' ? openPlayer(a.id) : router.push('/library'))}
-              accessibilityLabel={a.mediaType === 'video' ? 'Play video' : 'Open Library'}
+              onPress={() => (a.mediaType === 'video' ? openPlayer(a.id) : router.push('/photos'))}
+              accessibilityLabel={a.mediaType === 'video' ? 'Play video' : 'See all photos'}
             >
               <Image source={{ uri: a.uri }} style={[styles.photo, { width: tile, height: tile }]} contentFit="cover" recyclingKey={a.id} />
               {a.mediaType === 'video' && (

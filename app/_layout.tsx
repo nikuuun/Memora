@@ -41,6 +41,10 @@ export default function RootLayout() {
             player can open from Review without hiding behind it. */}
         <Stack.Screen name="review" />
         <Stack.Screen
+          name="album/photo"
+          options={{ animation: 'fade', contentStyle: { backgroundColor: '#000' }, fullScreenGestureEnabled: false }}
+        />
+        <Stack.Screen
           name="player"
           options={{ animation: 'fade', contentStyle: { backgroundColor: '#000' }, fullScreenGestureEnabled: true }}
         />
