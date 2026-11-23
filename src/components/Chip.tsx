@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { colors, formatCount, radius } from '../theme';
+import { Text } from './Text';
 
 /** A small rectangular keyword tag with its count. */
 export function Chip({

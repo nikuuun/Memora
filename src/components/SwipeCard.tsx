@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -14,6 +14,7 @@ import Animated, {
 
 import type { Row } from '../db/db';
 import { colors, formatDuration, radius } from '../theme';
+import { Text } from './Text';
 
 export type SwipeDirection = 'mark' | 'keep';
 
@@ -100,7 +101,7 @@ export function SwipeCard({ item, isTop, onSwiped, onPlay }: Props) {
           <Text style={styles.labelText}>Mark</Text>
         </Animated.View>
         <Animated.View style={[styles.label, styles.labelRight, keepLabel]}>
-          <Text style={styles.labelText}>Keep</Text>
+          <Text style={[styles.labelText, { color: colors.keep }]}>Keep</Text>
         </Animated.View>
       </Animated.View>
     </GestureDetector>

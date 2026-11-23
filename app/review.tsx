@@ -3,17 +3,18 @@ import { FlashList } from '@shopify/flash-list';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PhotoTile } from '../src/components/PhotoTile';
 import { ScreenHeader } from '../src/components/ScreenHeader';
+import { Text } from '../src/components/Text';
 import { openPlayer } from '../src/library/session';
 import { forget, setOne, unmarkAll } from '../src/db/actions';
 import { STATUS } from '../src/db/db';
 import { markedRows } from '../src/db/queries';
 import { useDbQuery } from '../src/library/useDbQuery';
-import { colors, items, radius, space } from '../src/theme';
+import { colors, fonts, items, radius, space } from '../src/theme';
 
 const COLUMNS = 4;
 const DEVICE = Platform.OS === 'ios' ? 'iPhone' : 'phone';
@@ -159,11 +160,11 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: colors.text,
+    backgroundColor: colors.keep,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  doneTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
+  doneTitle: { fontFamily: fonts.serif, fontSize: 26, color: colors.text },
   doneBody: { fontSize: 14, lineHeight: 20, color: colors.muted, textAlign: 'center', maxWidth: 280 },
   doneBtn: {
     marginTop: space.md,

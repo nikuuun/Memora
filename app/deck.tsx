@@ -1,17 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MarkedBar } from '../src/components/BottomBars';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { SwipeCard, type SwipeDirection } from '../src/components/SwipeCard';
+import { Text } from '../src/components/Text';
 import { setOne } from '../src/db/actions';
 import { STATUS, type Row, type Status } from '../src/db/db';
 import { openPlayer } from '../src/library/session';
 import { useLibrary } from '../src/library/store';
-import { colors, formatCount, radius, space } from '../src/theme';
+import { colors, fonts, formatCount, radius, space } from '../src/theme';
 
 type Step = { id: string; prev: Status; next: Status };
 
@@ -108,6 +109,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   choice: {
+    backgroundColor: colors.card,
     flex: 1,
     height: 52,
     borderRadius: radius.lg,
@@ -118,7 +120,7 @@ const styles = StyleSheet.create({
   },
   choiceText: { fontSize: 16, fontWeight: '600', color: colors.text },
   done: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: space.xl },
-  doneTitle: { fontSize: 20, fontWeight: '600', color: colors.text },
+  doneTitle: { fontFamily: fonts.serif, fontSize: 24, color: colors.text },
   doneBody: { fontSize: 14, color: colors.muted, textAlign: 'center' },
   doneBtn: {
     marginTop: space.sm,

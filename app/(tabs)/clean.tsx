@@ -1,18 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MarkedBar, UndoToast } from '../../src/components/BottomBars';
 import { Chip } from '../../src/components/Chip';
+import { Text, TextInput } from '../../src/components/Text';
 import { loadResults, loadTags, scopeCounts, type Group, type Scope, type Tag } from '../../src/db/queries';
 import { syncLibrary } from '../../src/db/sync';
 import { openDeck, openGrid, reviewAgain } from '../../src/library/session';
 import { useLibrary } from '../../src/library/store';
 import { useDbQuery } from '../../src/library/useDbQuery';
 import { PermissionGate } from '../../src/photos/PermissionGate';
-import { colors, formatCount, items, radius, space } from '../../src/theme';
+import { colors, eyebrowStyle, fonts, formatCount, items, radius, space, titleStyle } from '../../src/theme';
 
 export default function CleanScreen() {
   return (
@@ -259,13 +260,10 @@ function GroupCard({ group, inTodo }: { group: Group; inTodo: boolean }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    color: colors.text,
+    ...titleStyle,
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   indexCard: {
     marginHorizontal: space.lg,
@@ -274,6 +272,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: radius.md,
+    backgroundColor: colors.card,
     gap: 6,
   },
   indexRow: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -293,8 +292,8 @@ const styles = StyleSheet.create({
   },
   scopeBtn: { flex: 1, height: 38, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   scopeBtnActive: {
-    backgroundColor: colors.bg,
-    shadowColor: '#000',
+    backgroundColor: colors.card,
+    shadowColor: '#3A3428',
     shadowOpacity: 0.12,
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
@@ -333,15 +332,21 @@ const styles = StyleSheet.create({
   noTags: { fontSize: 13, color: colors.muted, lineHeight: 36 },
   results: { paddingHorizontal: space.lg, paddingBottom: space.lg, gap: 10 },
   headingRow: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heading: { fontSize: 12, fontWeight: '600', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  heading: { ...eyebrowStyle, textTransform: 'uppercase' },
   link: { fontSize: 14, color: colors.text, textDecorationLine: 'underline' },
-  matchCard: { padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface },
-  matchCount: { fontSize: 15, fontWeight: '600', color: colors.text },
+  matchCard: { padding: space.md, borderRadius: radius.lg, backgroundColor: colors.studio },
+  matchCount: { fontFamily: fonts.serif, fontSize: 20, color: colors.text },
   matchSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
   empty: { fontSize: 14, color: colors.muted, textAlign: 'center' },
   emptyBox: { marginTop: 40, alignItems: 'center', gap: 6, paddingHorizontal: space.xl },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.text },
-  card: { padding: space.md, borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg },
+  emptyTitle: { fontFamily: fonts.serif, fontSize: 22, color: colors.text },
+  card: {
+    padding: space.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+  },
   cardTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   cardSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
   thumbs: { flexDirection: 'row', gap: 3, marginTop: 10 },

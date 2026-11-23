@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { scopeCounts } from '../db/queries';
 import { useLibrary } from '../library/store';
 import { useDbQuery } from '../library/useDbQuery';
 import { colors, items, radius, space } from '../theme';
+import { Text } from './Text';
 
 /** "18 items marked. Nothing deleted yet." with Undo; disappears after 5 seconds. */
 export function UndoToast() {
@@ -58,7 +59,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.card,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 14,
     borderRadius: 8,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     justifyContent: 'center',
   },
   barButtonText: { color: colors.text, fontSize: 14, fontWeight: '600' },

@@ -1,10 +1,11 @@
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { useEffect, type ReactNode } from 'react';
 
+import { Text } from '../components/Text';
 import { startLibrarySync } from '../db/sync';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
 
-import { colors, radius, space } from '../theme';
+import { colors, fonts, radius, space } from '../theme';
 
 /**
  * Asks for photo access before showing its children.
@@ -67,7 +68,7 @@ function StartSync() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xl, gap: space.md },
-  title: { fontSize: 20, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  title: { fontFamily: fonts.serif, fontSize: 26, color: colors.text, textAlign: 'center' },
   body: { fontSize: 15, color: colors.muted, textAlign: 'center', lineHeight: 21 },
   button: {
     marginTop: space.sm,

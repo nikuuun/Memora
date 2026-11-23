@@ -1,17 +1,40 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 
-import { colors } from '../../src/theme';
+import { ComingSoon } from '../../src/components/ComingSoon';
+import { Text } from '../../src/components/Text';
+import { colors, fonts, radius } from '../../src/theme';
 
-// Placeholder: AI carousels and albums built from templates, editable afterwards.
+// Placeholder: stories built from templates (design/Linnie_template_layouts.png),
+// then AI that picks the template, colours and words from a prompt.
 export default function CreateScreen() {
+  const { prompt } = useLocalSearchParams<{ prompt?: string }>();
   return (
-    <View style={styles.center}>
-      <Text style={styles.text}>Create coming soon</Text>
-    </View>
+    <ComingSoon
+      icon="albums-outline"
+      title="Create a story"
+      body="Pick a template, add your photos, and save it as an image. Templates come first, then AI that shapes a story from a few words."
+    >
+      {prompt ? (
+        <View style={styles.idea}>
+          <Text style={styles.ideaLabel}>Your idea</Text>
+          <Text style={styles.ideaText}>“{prompt}”</Text>
+        </View>
+      ) : null}
+    </ComingSoon>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  text: { color: colors.muted, fontSize: 15 },
+  idea: {
+    marginTop: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    backgroundColor: colors.studio,
+    alignItems: 'center',
+    maxWidth: 320,
+  },
+  ideaLabel: { fontSize: 12, fontWeight: '600', color: colors.muted },
+  ideaText: { fontFamily: fonts.serifItalic, fontSize: 18, lineHeight: 25, color: colors.text, textAlign: 'center', marginTop: 4 },
 });

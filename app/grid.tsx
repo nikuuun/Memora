@@ -1,11 +1,12 @@
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PhotoTile } from '../src/components/PhotoTile';
 import { ScreenHeader } from '../src/components/ScreenHeader';
+import { Text } from '../src/components/Text';
 import { applyChanges } from '../src/db/actions';
 import { STATUS } from '../src/db/db';
 import { openPlayer } from '../src/library/session';
