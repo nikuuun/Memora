@@ -8,11 +8,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ReviewPill } from '../../src/components/ReviewPill';
 import { Text, TextInput } from '../../src/components/Text';
 import { scopeCounts } from '../../src/db/queries';
-import { openPlayer } from '../../src/library/session';
+import { listShots } from '../../src/digicam/shots';
 import { useDbQuery } from '../../src/library/useDbQuery';
 import { PermissionGate } from '../../src/photos/PermissionGate';
-import { usePhotos } from '../../src/photos/usePhotos';
-import { colors, eyebrowStyle, fonts, formatCount, formatDuration, radius, space } from '../../src/theme';
+import { colors, eyebrowStyle, fonts, formatCount, radius, space } from '../../src/theme';
 
 const RECENT = 9;
 const GAP = 5;
@@ -30,11 +29,11 @@ export default function HomeScreen() {
 
 function Home() {
   const { width } = useWindowDimensions();
-  const { assets } = usePhotos();
+  // The last photos taken with the Memora camera (the app's own database).
+  const shots = useDbQuery(() => listShots(RECENT), []);
   const counts = useDbQuery(scopeCounts, []);
   const [prompt, setPrompt] = useState('');
 
-  const recent = assets.slice(0, RECENT);
   const tile = (width - space.lg * 2 - GAP * 2) / 3;
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -88,33 +87,28 @@ function Home() {
 
       <View style={styles.sectionRow}>
         <Text style={styles.section}>Recent moments</Text>
-        <Pressable onPress={() => router.push('/photos')} hitSlop={8} style={styles.linkTouch}>
+        <Pressable onPress={() => router.push('/roll')} hitSlop={8} style={styles.linkTouch}>
           <Text style={styles.link}>See all →</Text>
         </Pressable>
       </View>
-      {recent.length ? (
+      {shots?.length ? (
         <View style={styles.grid}>
-          {recent.map((a) => (
-            <Pressable
-              key={a.id}
-              onPress={() => (a.mediaType === 'video' ? openPlayer(a.id) : router.push('/photos'))}
-              accessibilityLabel={a.mediaType === 'video' ? 'Play video' : 'See all photos'}
-            >
-              <Image source={{ uri: a.uri }} style={[styles.photo, { width: tile, height: tile }]} contentFit="cover" recyclingKey={a.id} />
-              {a.mediaType === 'video' && (
-                <View style={styles.duration}>
-                  <Ionicons name="play" size={10} color="#fff" />
-                  <Text style={styles.durationText}>{formatDuration(a.duration)}</Text>
-                </View>
-              )}
+          {shots.map((s) => (
+            <Pressable key={s.id} onPress={() => router.push('/roll')} accessibilityLabel="See all your Memora photos">
+              <Image
+                source={{ uri: s.developedUri }}
+                style={[styles.photo, { width: tile, height: tile }]}
+                contentFit="cover"
+                recyclingKey={s.developedUri}
+              />
             </Pressable>
           ))}
         </View>
       ) : (
-        <View style={styles.empty}>
-          <Ionicons name="images-outline" size={26} color={colors.muted} />
-          <Text style={styles.emptyText}>Your recent photos will appear here.</Text>
-        </View>
+        <Pressable style={styles.empty} onPress={() => router.navigate('/camera')}>
+          <Ionicons name="camera-outline" size={26} color={colors.muted} />
+          <Text style={styles.emptyText}>Photos you take with the Memora camera will appear here.</Text>
+        </Pressable>
       )}
 
       <Text style={[styles.section, styles.sectionAlone]}>Make room for more</Text>
@@ -183,19 +177,6 @@ const styles = StyleSheet.create({
   link: { fontSize: 13, fontWeight: '600', color: colors.muted },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   photo: { borderRadius: 6, backgroundColor: colors.surface },
-  duration: {
-    position: 'absolute',
-    left: 5,
-    bottom: 5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: colors.overlay,
-  },
-  durationText: { color: '#fff', fontSize: 10, fontWeight: '600', fontVariant: ['tabular-nums'] },
   empty: {
     borderWidth: 1,
     borderColor: colors.line,

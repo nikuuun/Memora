@@ -1,13 +1,13 @@
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { Text } from '../components/Text';
-import type { Look } from './settings';
+import type { previewLayers } from '../digicam/look';
 
-/** The look's colour layers, filling the parent (which should set `isolation: 'isolate'`). */
-export function LookLayers({ look }: { look: Look }) {
+/** Rough live preview of a camera's look, filling the parent (which should set `isolation: 'isolate'`). */
+export function LookLayers({ layers }: { layers: ReturnType<typeof previewLayers> }) {
   return (
     <>
-      {look.layers.map((l, i) => (
+      {layers.map((l, i) => (
         <View
           key={i}
           pointerEvents="none"

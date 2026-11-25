@@ -58,6 +58,21 @@ async function open() {
       user_album INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+    -- Photos taken or developed with the Memora camera. Files live in the app's
+    -- documents folder (names only, the folder path changes between installs).
+    CREATE TABLE IF NOT EXISTS shots (
+      id TEXT PRIMARY KEY NOT NULL,
+      original TEXT NOT NULL,
+      developed TEXT NOT NULL,
+      width INTEGER NOT NULL,
+      height INTEGER NOT NULL,
+      settings TEXT NOT NULL,
+      created INTEGER NOT NULL,
+      edited INTEGER NOT NULL,
+      asset_id TEXT,
+      source TEXT NOT NULL DEFAULT 'camera'
+    );
+    CREATE INDEX IF NOT EXISTS shots_created ON shots (created DESC);
   `);
   return db;
 }

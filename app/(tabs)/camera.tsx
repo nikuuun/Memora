@@ -1,39 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
-import { useIsFocused } from 'expo-router';
-import { type ComponentRef, type ReactNode, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  PixelRatio,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { router, useIsFocused } from 'expo-router';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { captureRef } from 'react-native-view-shot';
+import { SvgXml } from 'react-native-svg';
 
 import { DateStamp, GridLines, LookLayers } from '../../src/camera/Overlays';
-import {
-  type Flash,
-  type Look,
-  LOOKS,
-  lookById,
-  RATIO_HEIGHT,
-  type Ratio,
-  stampText,
-  type Timer,
-  useCameraSettings,
-} from '../../src/camera/settings';
+import { type Flash, RATIO_CROP, RATIO_HEIGHT, type Ratio, type Timer, useCameraSettings } from '../../src/camera/settings';
 import { Text } from '../../src/components/Text';
-import { saveToMemora } from '../../src/media/save';
+import { CAMERAS, cameraById, cameraSvg, defaultDevelop, previewLayers, stampLabel } from '../../src/digicam/look';
+import { addShot, listShots } from '../../src/digicam/shots';
+import { useDbQuery } from '../../src/library/useDbQuery';
 import { colors, fonts, radius } from '../../src/theme';
 
 const ACTIVE = '#FF9A3C';
@@ -42,13 +23,10 @@ const TIMERS: Timer[] = [0, 3, 10];
 const RATIOS: Ratio[] = ['4:3', '1:1', '16:9'];
 const next = <T,>(list: T[], v: T) => list[(list.indexOf(v) + 1) % list.length];
 
-/** Longest side of a saved photo that has a look, frame or date stamp baked in. */
-const MAX_OUTPUT = 4032;
+/** Drawn once: the camera-body pictures for the picker. */
+const BODIES = Object.fromEntries(CAMERAS.map((c) => [c.id, cameraSvg(c.body)]));
 
-/** A photo waiting to have its look, frame and date drawn in before saving. */
-type Job = { uri: string; width: number; height: number; look: Look; stamp: string | null };
-
-/** Digicam: film looks, date stamp, flash, timer, grid, frame shape. Saves to Photos. */
+/** Digicam: pick a camera, shoot, and the photo is developed with that camera's look. */
 export default function CameraScreen() {
   const focused = useIsFocused();
   const [perm, request] = useCameraPermissions();
@@ -74,8 +52,6 @@ function Digicam() {
   const s = useCameraSettings();
   const { width: screenW, height: screenH } = useWindowDimensions();
   const camera = useRef<CameraView>(null);
-  const composer = useRef<ComponentRef<typeof View>>(null);
-  const loaded = useRef<(() => void) | null>(null);
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const flashOpacity = useSharedValue(0);
   const blinkStyle = useAnimatedStyle(() => ({ opacity: flashOpacity.value }));
@@ -85,14 +61,14 @@ function Digicam() {
   const [zoom, setZoom] = useState(0);
   const zoomStart = useSharedValue(0);
   const [count, setCount] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [job, setJob] = useState<Job | null>(null);
-  const [last, setLast] = useState<string | null>(null);
+  const [developing, setDeveloping] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const latest = useDbQuery(() => listShots(1), []);
 
-  const look = lookById(s.look);
+  const cam = cameraById(s.camera);
+  const layers = useMemo(() => previewLayers(cam.recipe), [cam]);
   // The viewfinder keeps the frame shape, shrinking if a tall frame wouldn't fit.
-  const frameW = Math.min(screenW, (screenH * 0.62) / RATIO_HEIGHT[s.ratio]);
+  const frameW = Math.min(screenW, (screenH * 0.56) / RATIO_HEIGHT[s.ratio]);
   const frameH = frameW * RATIO_HEIGHT[s.ratio];
 
   useEffect(() => () => {
@@ -121,46 +97,26 @@ function Digicam() {
       setZoom(Math.min(1, Math.max(0, zoomStart.value + (e.scale - 1) * 0.12)));
     });
 
-  const blink = () => {
-    flashOpacity.set(withSequence(withTiming(1, { duration: 0 }), withTiming(0, { duration: 260 })));
-  };
-
-  /** Draws the look, frame shape and date into the photo, using the hidden composer view. */
-  const compose = async (photo: { uri: string; width: number; height: number }) => {
-    const h = RATIO_HEIGHT[s.ratio];
-    // Crop to the frame shape from the middle of the photo, like the viewfinder shows.
-    const fitsWidth = photo.height / photo.width >= h;
-    const outW = Math.min(MAX_OUTPUT / h, fitsWidth ? photo.width : photo.height / h);
-    const shown = new Promise<void>((resolve) => {
-      loaded.current = resolve;
-      setTimeout(resolve, 5000); // never hang if the image doesn't report back
-    });
-    // Laid out at full size (in points), so the capture is sharp rather than an upscaled preview.
-    const w = outW / PixelRatio.get();
-    setJob({ uri: photo.uri, width: w, height: w * h, look, stamp: s.dateStamp ? stampText() : null });
-    await shown;
-    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-    const uri = await captureRef(composer, { format: 'jpg', quality: 0.92 });
-    setJob(null);
-    return uri;
-  };
-
   const shoot = async () => {
-    if (!camera.current || busy) return;
-    setBusy(true);
+    if (!camera.current) return;
+    flashOpacity.set(withSequence(withTiming(1, { duration: 0 }), withTiming(0, { duration: 260 })));
+    let uri: string;
     try {
-      blink();
-      const photo = await camera.current.takePictureAsync({ quality: 0.92, shutterSound: s.shutterSound });
-      const plain = look.layers.length === 0 && !s.dateStamp && s.ratio === '4:3';
-      const uri = plain ? photo.uri : await compose(photo);
-      await saveToMemora(uri);
-      setLast(uri);
+      const photo = await camera.current.takePictureAsync({ quality: 0.95, shutterSound: s.shutterSound });
+      uri = photo.uri;
+    } catch (e) {
+      Alert.alert('Couldn’t take the photo', e instanceof Error ? e.message : 'Please try again.');
+      return;
+    }
+    // Develop in the background so you can keep shooting.
+    setDeveloping((n) => n + 1);
+    try {
+      await addShot(uri, defaultDevelop(cam.id, { stamp: s.dateStamp, crop: RATIO_CROP[s.ratio] }), 'camera');
       setToast('Saved to Photos');
     } catch (e) {
-      setJob(null);
       Alert.alert('Couldn’t save the photo', e instanceof Error ? e.message : 'Please try again.');
     } finally {
-      setBusy(false);
+      setDeveloping((n) => n - 1);
     }
   };
 
@@ -184,150 +140,132 @@ function Digicam() {
   };
 
   const flashIcon = s.flash === 'off' ? 'flash-off-outline' : 'flash-outline';
+  const last = latest?.[0];
 
   return (
-    <View style={styles.black}>
-      {/* Hidden composer: draws the saved photo with its look and date. Covered by the UI below. */}
-      {job ? (
-        <View ref={composer} collapsable={false} style={[styles.composer, { width: job.width, height: job.height }]}>
-          <Image
-            source={{ uri: job.uri }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            onLoad={() => loaded.current?.()}
-            onError={() => loaded.current?.()}
-          />
-          <LookLayers look={job.look} />
-          {job.stamp ? <DateStamp width={job.width} text={job.stamp} /> : null}
-        </View>
-      ) : null}
-      <View style={[StyleSheet.absoluteFill, styles.black]} />
+    <SafeAreaView style={styles.black} edges={['top']}>
+      {/* Settings bar */}
+      <View style={styles.topBar}>
+        <TopButton label={`Flash ${s.flash}`} onPress={() => s.set({ flash: next(FLASHES, s.flash) })}>
+          <Ionicons name={flashIcon} size={22} color={s.flash !== 'off' ? ACTIVE : '#fff'} />
+          {s.flash === 'auto' ? <Text style={[styles.badge, { color: ACTIVE }]}>A</Text> : null}
+        </TopButton>
+        <TopButton label={s.timer ? `Timer ${s.timer} seconds` : 'Timer off'} onPress={() => s.set({ timer: next(TIMERS, s.timer) })}>
+          <Ionicons name="timer-outline" size={22} color={s.timer ? ACTIVE : '#fff'} />
+          {s.timer ? <Text style={[styles.badge, { color: ACTIVE }]}>{s.timer}s</Text> : null}
+        </TopButton>
+        <TopButton label={`Frame ${s.ratio}`} onPress={() => s.set({ ratio: next(RATIOS, s.ratio) })}>
+          <Text style={styles.ratio}>{s.ratio}</Text>
+        </TopButton>
+        <TopButton label={s.grid ? 'Grid on' : 'Grid off'} onPress={() => s.set({ grid: !s.grid })}>
+          <Ionicons name="grid-outline" size={20} color={s.grid ? ACTIVE : '#fff'} />
+        </TopButton>
+        <TopButton label={s.dateStamp ? 'Date stamp on' : 'Date stamp off'} onPress={() => s.set({ dateStamp: !s.dateStamp })}>
+          <Text style={[styles.dateBtn, s.dateStamp && { color: ACTIVE, borderColor: ACTIVE }]}>DATE</Text>
+        </TopButton>
+        <TopButton
+          label={s.shutterSound ? 'Shutter sound on' : 'Shutter sound off'}
+          onPress={() => s.set({ shutterSound: !s.shutterSound })}
+        >
+          <Ionicons name={s.shutterSound ? 'volume-high-outline' : 'volume-mute-outline'} size={22} color="#fff" />
+        </TopButton>
+      </View>
 
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Settings bar */}
-        <View style={styles.topBar}>
-          <TopButton label={`Flash ${s.flash}`} onPress={() => s.set({ flash: next(FLASHES, s.flash) })}>
-            <Ionicons name={flashIcon} size={22} color={s.flash !== 'off' ? ACTIVE : '#fff'} />
-            {s.flash === 'auto' ? <Text style={[styles.badge, { color: ACTIVE }]}>A</Text> : null}
-          </TopButton>
-          <TopButton label={s.timer ? `Timer ${s.timer} seconds` : 'Timer off'} onPress={() => s.set({ timer: next(TIMERS, s.timer) })}>
-            <Ionicons name="timer-outline" size={22} color={s.timer ? ACTIVE : '#fff'} />
-            {s.timer ? <Text style={[styles.badge, { color: ACTIVE }]}>{s.timer}s</Text> : null}
-          </TopButton>
-          <TopButton label={`Frame ${s.ratio}`} onPress={() => s.set({ ratio: next(RATIOS, s.ratio) })}>
-            <Text style={styles.ratio}>{s.ratio}</Text>
-          </TopButton>
-          <TopButton label={s.grid ? 'Grid on' : 'Grid off'} onPress={() => s.set({ grid: !s.grid })}>
-            <Ionicons name="grid-outline" size={20} color={s.grid ? ACTIVE : '#fff'} />
-          </TopButton>
-          <TopButton label={s.dateStamp ? 'Date stamp on' : 'Date stamp off'} onPress={() => s.set({ dateStamp: !s.dateStamp })}>
-            <Text style={[styles.dateBtn, s.dateStamp && { color: ACTIVE, borderColor: ACTIVE }]}>DATE</Text>
-          </TopButton>
-          <TopButton
-            label={s.shutterSound ? 'Shutter sound on' : 'Shutter sound off'}
-            onPress={() => s.set({ shutterSound: !s.shutterSound })}
-          >
-            <Ionicons name={s.shutterSound ? 'volume-high-outline' : 'volume-mute-outline'} size={22} color="#fff" />
-          </TopButton>
-        </View>
-
-        {/* Viewfinder */}
-        <View style={styles.finderArea}>
-          <GestureDetector gesture={pinch}>
-            <View style={[styles.finder, { width: frameW, height: frameH }]} collapsable={false}>
-              <CameraView
-                ref={camera}
-                style={StyleSheet.absoluteFill}
-                facing={s.facing}
-                flash={s.flash}
-                zoom={zoom}
-                animateShutter={false}
-                onCameraReady={() => setReady(true)}
-                onMountError={(e) => setMountError(e.message)}
-              />
-              <LookLayers look={look} />
-              {s.grid ? <GridLines /> : null}
-              {s.dateStamp ? <DateStamp width={frameW} text={stampText()} /> : null}
-              {count != null ? (
-                <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
-                  <Text style={styles.count}>{count}</Text>
-                </View>
-              ) : null}
-              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.blink, blinkStyle]} />
-              {mountError ? (
-                <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
-                  <Text style={styles.mountError}>Camera couldn’t start: {mountError}</Text>
-                </View>
-              ) : !ready ? (
-                <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
-                  <ActivityIndicator color="#fff" />
-                </View>
-              ) : null}
+      {/* Viewfinder */}
+      <View style={styles.finderArea}>
+        <GestureDetector gesture={pinch}>
+          <View style={[styles.finder, { width: frameW, height: frameH }]} collapsable={false}>
+            <CameraView
+              ref={camera}
+              style={StyleSheet.absoluteFill}
+              facing={s.facing}
+              flash={s.flash}
+              zoom={zoom}
+              animateShutter={false}
+              onCameraReady={() => setReady(true)}
+              onMountError={(e) => setMountError(e.message)}
+            />
+            <LookLayers layers={layers} />
+            {s.grid ? <GridLines /> : null}
+            {s.dateStamp ? <DateStamp width={frameW} text={stampLabel(cam.stamp.style, new Date())} /> : null}
+            {count != null ? (
+              <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
+                <Text style={styles.count}>{count}</Text>
+              </View>
+            ) : null}
+            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.blink, blinkStyle]} />
+            {mountError ? (
+              <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
+                <Text style={styles.mountError}>Camera couldn’t start: {mountError}</Text>
+              </View>
+            ) : !ready ? (
+              <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
+                <ActivityIndicator color="#fff" />
+              </View>
+            ) : null}
+            <View style={styles.camTag} pointerEvents="none">
+              <Text style={styles.camTagText}>{cam.name.toUpperCase()}</Text>
             </View>
-          </GestureDetector>
-          {zoom > 0.01 ? (
-            <Pressable style={styles.zoomPill} onPress={() => setZoom(0)} accessibilityLabel="Reset zoom">
-              <Text style={styles.zoomText}>Reset zoom</Text>
+          </View>
+        </GestureDetector>
+        {zoom > 0.01 ? (
+          <Pressable style={styles.zoomPill} onPress={() => setZoom(0)} accessibilityLabel="Reset zoom">
+            <Text style={styles.zoomText}>Reset zoom</Text>
+          </Pressable>
+        ) : null}
+        {developing > 0 || toast ? (
+          <View style={styles.toast} pointerEvents="none">
+            {developing > 0 ? <ActivityIndicator size="small" color={colors.card} /> : <Ionicons name="checkmark-circle" size={16} color={colors.card} />}
+            <Text style={styles.toastText}>{developing > 0 ? 'Developing…' : toast}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Camera picker */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cams}>
+        {CAMERAS.map((c) => {
+          const on = c.id === cam.id;
+          return (
+            <Pressable
+              key={c.id}
+              onPress={() => s.set({ camera: c.id })}
+              style={[styles.cam, on && styles.camOn]}
+              accessibilityLabel={`${c.name} camera. ${c.blurb}`}
+              accessibilityState={{ selected: on }}
+            >
+              <SvgXml xml={BODIES[c.id]} width={60} height={42} />
+              <Text style={[styles.camName, on && { color: '#fff' }]} numberOfLines={1}>
+                {c.name}
+              </Text>
             </Pressable>
-          ) : null}
-          {toast ? (
-            <View style={styles.toast} pointerEvents="none">
-              <Ionicons name="checkmark-circle" size={16} color={colors.card} />
-              <Text style={styles.toastText}>{toast}</Text>
-            </View>
-          ) : null}
-        </View>
+          );
+        })}
+      </ScrollView>
 
-        {/* Looks */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.looks}>
-          {LOOKS.map((l) => {
-            const on = l.id === look.id;
-            return (
-              <Pressable
-                key={l.id}
-                onPress={() => s.set({ look: l.id })}
-                style={styles.look}
-                accessibilityLabel={`${l.name} look`}
-                accessibilityState={{ selected: on }}
-              >
-                <View style={[styles.swatch, { backgroundColor: l.swatch }, on && styles.swatchOn]} />
-                <Text style={[styles.lookName, on && { color: '#fff' }]}>{l.name}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {/* Shutter row */}
-        <View style={styles.bottom}>
-          <Pressable
-            style={styles.thumb}
-            disabled={!last}
-            onPress={() => Linking.openURL(Platform.OS === 'ios' ? 'photos-redirect://' : 'content://media/internal/images/media')}
-            accessibilityLabel="Open Photos"
-          >
-            {last ? <Image source={{ uri: last }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-          </Pressable>
-          <Pressable
-            style={[styles.shutter, busy && { opacity: 0.5 }]}
-            onPress={onShutter}
-            disabled={busy}
-            accessibilityLabel={count != null ? 'Cancel timer' : 'Take photo'}
-          >
-            <View style={[styles.shutterInner, count != null && styles.shutterCancel]} />
-          </Pressable>
-          <Pressable
-            style={styles.flip}
-            onPress={() => {
-              setZoom(0);
-              s.set({ facing: s.facing === 'back' ? 'front' : 'back' });
-            }}
-            accessibilityLabel="Switch camera"
-          >
-            <Ionicons name="camera-reverse-outline" size={26} color="#fff" />
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    </View>
+      {/* Shutter row */}
+      <View style={styles.bottom}>
+        <Pressable style={styles.thumb} onPress={() => router.push('/roll')} accessibilityLabel="Open your Memora photos">
+          {last ? (
+            <Image source={{ uri: last.developedUri }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={last.developedUri} />
+          ) : (
+            <Ionicons name="images-outline" size={20} color="#888" />
+          )}
+        </Pressable>
+        <Pressable style={styles.shutter} onPress={onShutter} accessibilityLabel={count != null ? 'Cancel timer' : 'Take photo'}>
+          <View style={[styles.shutterInner, count != null && styles.shutterCancel]} />
+        </Pressable>
+        <Pressable
+          style={styles.flip}
+          onPress={() => {
+            setZoom(0);
+            s.set({ facing: s.facing === 'back' ? 'front' : 'back' });
+          }}
+          accessibilityLabel="Switch camera"
+        >
+          <Ionicons name="camera-reverse-outline" size={26} color="#fff" />
+        </Pressable>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -342,7 +280,6 @@ function TopButton({ label, onPress, children }: { label: string; onPress: () =>
 const styles = StyleSheet.create({
   black: { flex: 1, backgroundColor: '#000' },
   center: { alignItems: 'center', justifyContent: 'center' },
-  composer: { position: 'absolute', left: 0, top: 0, isolation: 'isolate', overflow: 'hidden' },
   permTitle: { fontFamily: fonts.serif, fontSize: 24, color: '#fff', marginTop: 14, textAlign: 'center' },
   permBody: { fontSize: 15, lineHeight: 22, color: colors.mutedOnDark, textAlign: 'center', marginTop: 8, paddingHorizontal: 32 },
   permBtn: { marginTop: 20, height: 48, paddingHorizontal: 24, borderRadius: radius.lg, backgroundColor: '#fff', justifyContent: 'center' },
@@ -367,6 +304,16 @@ const styles = StyleSheet.create({
   count: { fontFamily: fonts.bold, fontSize: 96, color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 12 },
   blink: { backgroundColor: '#fff' },
   mountError: { fontSize: 14, color: '#fff', textAlign: 'center', paddingHorizontal: 24 },
+  camTag: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  camTagText: { fontFamily: fonts.bold, fontSize: 10, letterSpacing: 1.2, color: '#fff' },
   zoomPill: {
     position: 'absolute',
     bottom: 12,
@@ -389,11 +336,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(37,37,31,0.85)',
   },
   toastText: { fontSize: 13, fontWeight: '600', color: colors.card },
-  looks: { paddingHorizontal: 12, gap: 4, paddingVertical: 8 },
-  look: { width: 64, alignItems: 'center', gap: 5, paddingVertical: 2 },
-  swatch: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: 'transparent' },
-  swatchOn: { borderColor: '#fff' },
-  lookName: { fontSize: 11, fontWeight: '600', color: '#9A978C' },
+  cams: { paddingHorizontal: 10, gap: 6, paddingVertical: 8 },
+  cam: { width: 76, alignItems: 'center', paddingVertical: 6, borderRadius: 12, borderWidth: 1.5, borderColor: 'transparent' },
+  camOn: { borderColor: ACTIVE, backgroundColor: '#1A1A1A' },
+  camName: { fontSize: 10.5, fontWeight: '600', color: '#9A978C', marginTop: 4 },
   bottom: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -402,7 +348,17 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 12,
   },
-  thumb: { width: 48, height: 48, borderRadius: 10, overflow: 'hidden', backgroundColor: '#222', borderWidth: 1, borderColor: '#444' },
+  thumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#222',
+    borderWidth: 1,
+    borderColor: '#444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   shutter: {
     width: 76,
     height: 76,
