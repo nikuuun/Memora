@@ -81,6 +81,7 @@ function Digicam() {
   const blinkStyle = useAnimatedStyle(() => ({ opacity: flashOpacity.value }));
 
   const [ready, setReady] = useState(false);
+  const [mountError, setMountError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0);
   const zoomStart = useSharedValue(0);
   const [count, setCount] = useState<number | null>(null);
@@ -96,6 +97,13 @@ function Digicam() {
 
   useEffect(() => () => {
     if (countdownTimer.current) clearInterval(countdownTimer.current);
+  }, []);
+
+  // iOS sends "camera ready" only once per camera view, and it can be missed,
+  // so never wait on it for long: the shutter works after a moment regardless.
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 1500);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -235,6 +243,7 @@ function Digicam() {
                 zoom={zoom}
                 animateShutter={false}
                 onCameraReady={() => setReady(true)}
+                onMountError={(e) => setMountError(e.message)}
               />
               <LookLayers look={look} />
               {s.grid ? <GridLines /> : null}
@@ -245,7 +254,11 @@ function Digicam() {
                 </View>
               ) : null}
               <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.blink, blinkStyle]} />
-              {!ready ? (
+              {mountError ? (
+                <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
+                  <Text style={styles.mountError}>Camera couldn’t start: {mountError}</Text>
+                </View>
+              ) : !ready ? (
                 <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
                   <ActivityIndicator color="#fff" />
                 </View>
@@ -297,7 +310,7 @@ function Digicam() {
           <Pressable
             style={[styles.shutter, busy && { opacity: 0.5 }]}
             onPress={onShutter}
-            disabled={busy || !ready}
+            disabled={busy}
             accessibilityLabel={count != null ? 'Cancel timer' : 'Take photo'}
           >
             <View style={[styles.shutterInner, count != null && styles.shutterCancel]} />
@@ -305,7 +318,6 @@ function Digicam() {
           <Pressable
             style={styles.flip}
             onPress={() => {
-              setReady(false);
               setZoom(0);
               s.set({ facing: s.facing === 'back' ? 'front' : 'back' });
             }}
@@ -354,6 +366,7 @@ const styles = StyleSheet.create({
   finder: { overflow: 'hidden', isolation: 'isolate', backgroundColor: '#111' },
   count: { fontFamily: fonts.bold, fontSize: 96, color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 12 },
   blink: { backgroundColor: '#fff' },
+  mountError: { fontSize: 14, color: '#fff', textAlign: 'center', paddingHorizontal: 24 },
   zoomPill: {
     position: 'absolute',
     bottom: 12,
