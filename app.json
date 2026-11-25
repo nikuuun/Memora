@@ -42,8 +42,17 @@
         "expo-media-library",
         {
           "photosPermission": "Memora shows your photos so you can sort and clean them. Only photos you add to a shared album leave your phone.",
-          "savePhotosPermission": "Memora saves photos from your shared albums to your library.",
+          "savePhotosPermission": "Memora saves your camera shots, stories and photos from shared albums to your library.",
           "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Memora uses the camera to take photos, which are saved to your library.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false
         }
       ],
       "expo-sqlite",
